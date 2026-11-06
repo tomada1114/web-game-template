@@ -974,7 +974,6 @@ describe("the workflows in .github/workflows", () => {
       "ci.yml",
       "dependency-review.yml",
       "pr-label.yml",
-      "release.yml",
       "security-audit.yml",
       "typos.yml",
     ]);
@@ -1028,117 +1027,39 @@ describe("the workflows in .github/workflows", () => {
 
   it("grants a write scope only where the job cannot do its work without one", () => {
     // pr-label writes a label and tolerates the read-only token a fork PR
-    // gets; release needs OIDC and a tag push. Everything else, and in
-    // particular everything that runs repository code, stays read-only.
+    // gets. Everything else, and in particular everything that runs
+    // repository code, stays read-only.
     const writers = workflowNames.filter((name) =>
       scan(workflowSource(name)).some((line) => line.text.endsWith(": write")),
     );
 
-    expect(writers.sort()).toEqual(["pr-label.yml", "release.yml"]);
+    expect(writers.sort()).toEqual(["pr-label.yml"]);
   });
 });
 
-describe("the release workflow preserves the reviewed artifact", () => {
-  const source = workflowSource("release.yml");
-  const publish = jobsOf(scan(source)).find((job) => job.name === "publish");
-
-  it("uses only read access and OIDC in the publish job", () => {
-    expect(publish).toBeDefined();
-    if (publish === undefined) {
-      return;
-    }
-    const permissions = jobKey(publish, "permissions");
-    expect(permissions).toBeDefined();
-    if (permissions === undefined) {
-      return;
-    }
+describe("no workflow publishes to npm", () => {
+  // A game ships as a built zip, not an npm package, so nothing here may
+  // publish to a registry or mint an OIDC token a registry would accept.
+  it.each(workflowNames)("%s requests no id-token scope", (name) => {
     expect(
-      blockOf(publish.body, publish.body.indexOf(permissions)).map((line) => line.text),
-    ).toEqual(["contents: read", "id-token: write"]);
-    expect(jobKey(publish, "environment")?.text).toBe("environment: release");
-  });
-
-  it("does not refer to a long-lived npm token or enable a dependency cache", () => {
-    expect(source).not.toContain("NPM_TOKEN");
-    // setup-node's package-manager-cache is explicitly disabled: a release
-    // workflow must never restore build state from a previous run's cache.
-    expect(source).not.toMatch(/cache:\s*(?!false\b)\S/);
-  });
-
-  it("checks the tag before publishing", () => {
-    expect(source.indexOf("Verify tag matches package version")).toBeGreaterThan(-1);
-    expect(source.indexOf("Verify tag matches package version")).toBeLessThan(
-      source.indexOf("npm publish dist/package.tgz"),
-    );
-  });
-
-  it("builds and packs once, then reuses the fixed tarball path", () => {
-    expect(source.match(/\bpnpm pack\b/g)).toHaveLength(1);
-    expect(source).toContain("pnpm run package:verify -- --tarball dist/package.tgz");
-    expect(source).toContain("npm publish dist/package.tgz");
-    expect(source).toContain(
-      'npm pack "${PACKAGE}@${VERSION}" --pack-destination dist',
-    );
-    expect(source).toContain("path: dist/package.tgz");
-    expect(source).not.toContain("pnpm check");
-    expect(source).toContain("pnpm run check:source");
-  });
-
-  it("takes the publish contract from package.json rather than from flags", () => {
-    // publishConfig carries access, provenance and the registry (asserted in
-    // tests/package.test.ts). A flag here would be a second copy that only
-    // this call site obeys — the rehearsal and a manual publish would keep
-    // whatever the manifest says, and the two could drift apart unnoticed.
-    // --tag is the one exception: publishConfig is a static file and cannot
-    // express a per-release dist-tag decision (stable release vs. a
-    // release-candidate that must not move `latest`), so that one flag is
-    // required rather than forbidden.
-    const publishes = runCommands(source).filter(({ command }) =>
-      /\bnpm publish\b/.test(command),
-    );
-
-    expect(publishes).toHaveLength(1);
-    expect(
-      publishes.filter(({ command }) =>
-        /--(?:access|provenance|registry)\b/.test(command),
-      ),
+      scan(workflowSource(name)).filter((line) => line.text.startsWith("id-token:")),
     ).toEqual([]);
   });
 
-  it("always publishes with an explicit dist-tag from the tag-verification step", () => {
-    // A release candidate must never move the `latest` npm dist-tag. The
-    // verify-tag step derives the right dist-tag (the prerelease identifier,
-    // or "latest" for a stable version) and every npm publish call carries
-    // it — including the stable case, where it evaluates to `--tag latest`
-    // as an explicit statement rather than an implicit default.
-    const publishes = runCommands(source).filter(({ command }) =>
-      /\bnpm publish\b/.test(command),
-    );
+  it.each(workflowNames)(
+    "%s runs no publish command and names no npm token",
+    (name) => {
+      const source = workflowSource(name);
+      expect(
+        runCommands(source).filter(({ command }) =>
+          /\b(?:npm|pnpm) publish\b/.test(command),
+        ),
+      ).toEqual([]);
+      expect(source).not.toContain("NPM_TOKEN");
+    },
+  );
 
-    expect(publishes).toHaveLength(1);
-    expect(
-      publishes.filter(({ command }) =>
-        /--tag\s+"\$\{\{\s*steps\.verify-tag\.outputs\.dist_tag\s*\}\}"/.test(command),
-      ),
-    ).toHaveLength(1);
-  });
-
-  it("derives the npm dist-tag and prerelease flag from the version's prerelease identifier", () => {
-    expect(source).toContain("id: verify-tag");
-    expect(source).toContain('echo "dist_tag=${PRERELEASE_ID}" >> "${GITHUB_OUTPUT}"');
-    expect(source).toContain('echo "dist_tag=latest" >> "${GITHUB_OUTPUT}"');
-    expect(source).toContain('echo "prerelease=true" >> "${GITHUB_OUTPUT}"');
-    expect(source).toContain('echo "prerelease=false" >> "${GITHUB_OUTPUT}"');
-  });
-
-  it("marks the GitHub Release as a prerelease when the version has a prerelease identifier", () => {
-    expect(source).toContain("needs.publish.outputs.prerelease");
-    expect(source).toContain("--prerelease");
-    expect(source.indexOf("outputs:")).toBeGreaterThan(-1);
-    expect(source).toContain("prerelease: ${{ steps.verify-tag.outputs.prerelease }}");
-  });
-
-  it("does not hide a rebuild or repack behind the release scripts", () => {
+  it("does not hide a rebuild or repack behind check:source", () => {
     const scripts = (
       JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")) as {
         scripts: Record<string, string>;
@@ -1147,8 +1068,6 @@ describe("the release workflow preserves the reviewed artifact", () => {
 
     expect(scripts["check:source"]?.match(/\bpnpm run build\b/g)).toHaveLength(1);
     expect(scripts["check:source"]).not.toMatch(/\b(?:pnpm|npm) pack\b/);
-    expect(scripts["package:verify"]).not.toContain("build");
-    expect(scripts["package:verify"]).not.toMatch(/\b(?:pnpm|npm) pack\b/);
   });
 });
 
@@ -1282,8 +1201,11 @@ describe("workflow regression checks for repository automation", () => {
   it("runs the test job as a fail-fast-free OS matrix with one coverage leg", () => {
     const source = workflowSource("ci.yml");
     const testStart = source.indexOf("  test:");
-    const packageStart = source.indexOf("  package:", testStart);
-    const testJob = source.slice(testStart, packageStart);
+    const nextJob = /^ {2}[a-z][a-z-]*:$/m.exec(source.slice(testStart + 1));
+    const testJob = source.slice(
+      testStart,
+      nextJob === null ? undefined : testStart + 1 + nextJob.index,
+    );
 
     expect(testJob).toContain("name: Test (${{ matrix.os }})");
     expect(testJob).toContain("strategy:");
@@ -1311,29 +1233,15 @@ describe("workflow regression checks for repository automation", () => {
     expect(source).toContain("exit 1");
   });
 
-  it("checks the published Node floor with package:smoke after packing on Node 24", () => {
-    // A package that declares no `engines.node` (the universal-library
-    // profile) has no floor to verify, so bootstrap removes the whole job
-    // instead of leaving it to check a floor that does not exist — see the
-    // `# profile:node-library:` block wrapping it below.
+  it("runs no npm package job and no documentation build", () => {
     const source = workflowSource("ci.yml");
-    const packageFloorStart = source.indexOf("  package-floor:");
-    const floor = /^>=(\d+)$/.exec(manifest.engines?.node ?? "")?.[1];
+    const jobs = jobsOf(scan(source)).map((job) => job.name);
 
-    if (floor === undefined) {
-      expect(packageFloorStart).toBe(-1);
-      return;
-    }
-    expect(packageFloorStart).toBeGreaterThan(-1);
-    const packageFloor = source.slice(packageFloorStart);
-
-    expect(packageFloor).toContain(`node-version: ${floor}`);
-    expect(packageFloor).toContain("pnpm run build");
-    expect(packageFloor).toContain("pnpm pack --pack-destination .smoke");
-    expect(packageFloor).toContain(
-      "pnpm --config.runtime-on-fail=ignore run package:smoke -- --pack-dir .smoke",
-    );
-    expect(packageFloor).toContain("pnpm install --frozen-lockfile");
+    expect(jobs).not.toContain("package");
+    expect(jobs).not.toContain("package-floor");
+    expect(
+      runCommands(source).filter(({ command }) => command.includes("docs:build")),
+    ).toEqual([]);
   });
 });
 
@@ -1344,9 +1252,7 @@ describe("the development runtime contract fails closed", () => {
 
   it("keeps devEngines and .node-version on the development Node major", () => {
     // `devEngines.runtime.version` is what pnpm enforces locally, and
-    // `.node-version` is what the source-check jobs install. The published
-    // `engines.node` floor is intentionally independent and is exercised by
-    // the package-floor job above.
+    // `.node-version` is what the source-check jobs install.
     const major = (value: string) => /(\d+)/.exec(value)?.[1];
     const nodeVersionFile = readFileSync(
       path.join(repoRoot, ".node-version"),

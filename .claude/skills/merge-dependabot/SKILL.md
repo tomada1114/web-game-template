@@ -14,8 +14,8 @@ description: >
 **Owns:** landing already-open Dependabot/Renovate PRs — triage, landing mode, the
 combined branch, and cleanup. **Does not own:** whether a package may be added or bumped
 at all, the release-age cooldown, and the supply-chain settings
-(`managing-dependencies`); the release-impact note a consumer-visible bump owes
-(`release-impact`).
+(`managing-dependencies`); the release line a player-visible bump owes
+(`releasing-builds`).
 
 Branch names, commit messages, and PR text follow AGENTS.md's English-only convention.
 
@@ -133,19 +133,15 @@ pnpm install --lockfile-only
 git add package.json pnpm-lock.yaml && git commit -m "deps: regenerate the lockfile"
 ```
 
-Verify locally on the development Node, then on the minimum supported Node (a separate
-CI job):
+Verify locally:
 
 ```bash
 pnpm install --frozen-lockfile && pnpm check
-pnpm --config.runtime-on-fail=ignore run check
 ```
 
-`pnpm check` also covers the packaging gates (`publint`, are-the-types-wrong, the
-tarball smoke test) that a bump can break without touching source. Fix a mechanical
-failure (a renamed lint rule, a new type error from a stricter TypeScript) on the
-branch; for a judgement call, stop and report instead of merging around it or
-suppressing the error.
+Fix a mechanical failure (a renamed lint rule, a new type error from a stricter
+TypeScript) on the branch; for a judgement call, stop and report instead of merging
+around it or suppressing the error.
 
 Push and open the PR with a valid Conventional Commits title (the `check-pr-title`
 workflow skips PRs labeled `dependencies`, but the squashed history and generated
@@ -159,9 +155,8 @@ gh pr create --title "deps: batch dependency updates" \
   --label dependencies --body "<filled PR template>"
 ```
 
-A dependency bump that consumers can observe (a changed peer range, a raised
-`engines.node`, a new runtime dependency) needs a release-impact note
-(`release-impact`); a devDependency bump does not.
+A dependency bump that players can observe (a runtime dependency that ships in the
+bundle) needs `Release: needed` (`releasing-builds`); a devDependency bump does not.
 
 ## Step 5: Land and clean up
 

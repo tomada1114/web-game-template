@@ -14,7 +14,7 @@
 
     // Off because TypeScript honours `inlineSources` for `.js.map` only: a
     // `.d.ts.map` always references `../src/*.ts` by path, so every one of them
-    // would ship dangling. `check-package.mjs` enforces that as an invariant.
+    // would ship dangling, so the build emits none.
     "declarationMap": false,
     "isolatedDeclarations": true,
 
@@ -23,9 +23,9 @@
     "allowJs": false,
     "checkJs": false,
 
-    // The node-library profile may use `node:` builtins in src. The universal
-    // profile replaces this with `"types": []` so a Node-only import fails the
-    // build instead of silently narrowing where the package can run.
+    // `src/` may use `node:` builtins. The explicit `lib` keeps browser-only
+    // globals out, so a DOM reference fails the build instead of silently
+    // narrowing where the code can run.
     "types": ["node"],
     "lib": ["ES2023"]
   },

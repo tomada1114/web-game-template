@@ -16,7 +16,6 @@ import { fileURLToPath } from "node:url";
 import process from "node:process";
 
 import { format, getFileInfo, resolveConfig } from "prettier";
-import { ESLint } from "eslint";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -143,32 +142,16 @@ function aiLayerFiles(root: string): string[] {
   ];
 }
 
-function options(
-  packageName: string,
-  profile: "node-library" | "universal-library",
-  cli: "yes" | "no" = "no",
-  nodeEngines?: string,
-): ReturnType<typeof parseArguments> {
-  const argv = [
+function options(packageName: string): ReturnType<typeof parseArguments> {
+  return parseArguments([
     packageName,
-    "--profile",
-    profile,
     "--author",
     "Ada Lovelace",
-    "--email",
-    "ada@example.com",
     "--github-user",
     "ada",
     "--license",
     "MIT",
-  ];
-  if (cli === "yes") {
-    argv.push("--cli", cli);
-  }
-  if (nodeEngines !== undefined) {
-    argv.push("--node-engines", nodeEngines);
-  }
-  return parseArguments(argv);
+  ]);
 }
 
 afterEach(() => {
@@ -233,50 +216,14 @@ describe("bootstrap validation", () => {
   });
 
   it("uses the default description when it is omitted", () => {
-    const parsed = options("acme-library", "node-library");
+    const parsed = options("acme-library");
     expect(parsed.description).toBe("A TypeScript package.");
   });
 
-  it("defaults to no CLI and accepts a Node CLI option", () => {
-    expect(options("library-package", "node-library").cli).toBe(false);
-    expect(options("cli-package", "node-library", "yes").cli).toBe(true);
-  });
-
-  it("defaults the published Node floor to 24 and accepts a lower floor", () => {
-    expect(options("library-package", "node-library").nodeEngines).toBe(">=24");
-    expect(options("older-library", "node-library", "no", ">=20").nodeEngines).toBe(
-      ">=20",
-    );
-  });
-
-  it.each(["20", ">=", ">=20.1", ">=20 <24", ">=0", ">=18", ">=020"])(
-    "rejects a non-bare Node floor %j",
-    (nodeEngines) => {
-      expect(() => options("invalid-floor", "node-library", "no", nodeEngines)).toThrow(
-        /ERR_NODE_ENGINES_INVALID/,
-      );
-    },
-  );
-
   it("rejects repeated metadata options rather than silently overwriting them", () => {
-    expect(() =>
-      parseArguments([
-        "duplicate-options",
-        "--profile",
-        "node-library",
-        "--profile",
-        "universal-library",
-      ]),
-    ).toThrow(BootstrapError);
-    expect(() =>
-      parseArguments([
-        "duplicate-options",
-        "--profile",
-        "node-library",
-        "--profile",
-        "universal-library",
-      ]),
-    ).toThrow(/ERR_ARGUMENT_DUPLICATE/);
+    const argv = ["duplicate-options", "--author", "Ada", "--author", "Grace"];
+    expect(() => parseArguments(argv)).toThrow(BootstrapError);
+    expect(() => parseArguments(argv)).toThrow(/ERR_ARGUMENT_DUPLICATE/);
   });
 
   it("prints help without inspecting or changing a repository", () => {
@@ -290,43 +237,50 @@ describe("bootstrap validation", () => {
     );
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("--dry-run");
+    expect(result.stdout).not.toMatch(/--(?:profile|cli|node-engines|email)\b/);
     expect(result.stderr).toBe("");
   });
 
-  it("rejects an unsupported CLI option value", () => {
+  // The template has one shape now: no profile, no CLI choice, no published
+  // Node floor and no author email to ask for.
+  it.each([
+    ["--profile", "node-library"],
+    ["--cli", "yes"],
+    ["--node-engines", ">=20"],
+    ["--email", "ada@example.com"],
+  ])("rejects the removed %s option as unknown", (flag, value) => {
     expect(() =>
       parseArguments([
-        "cli-package",
-        "--profile",
-        "node-library",
-        "--cli",
-        "maybe",
+        "acme-library",
+        flag,
+        value,
         "--author",
         "Ada Lovelace",
-        "--email",
-        "ada@example.com",
         "--github-user",
         "ada",
         "--license",
         "MIT",
       ]),
-    ).toThrow(/ERR_CLI_INVALID/);
+    ).toThrow(new RegExp(`ERR_ARGUMENT_UNKNOWN: unknown option: ${flag}`));
   });
 
-  it("refuses a CLI for the universal-library profile with its own error", () => {
-    expect(() => options("universal-cli", "universal-library", "yes")).toThrow(
-      /ERR_CLI_UNSUPPORTED/,
+  it("rejects a removed option given before the package name as unknown", () => {
+    const result = spawnSync(
+      process.execPath,
+      [path.join(repoRoot, "scripts/bootstrap.mjs"), "--profile", "node-library"],
+      {
+        cwd: tmpdir(),
+        encoding: "utf8",
+      },
     );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("ERR_ARGUMENT_UNKNOWN: unknown option: --profile");
   });
 
   it("collects package metadata through the interactive prompts", async () => {
     const answers = [
       "interactive-package",
-      "universal-library",
-      "",
-      "",
       "Ada Lovelace",
-      "ada@example.com",
       "ada",
       "ISC",
       "An interactive package.",
@@ -339,20 +293,14 @@ describe("bootstrap validation", () => {
 
     expect(parsed).toMatchObject({
       packageName: "interactive-package",
-      profile: "universal-library",
       author: "Ada Lovelace",
-      email: "ada@example.com",
       githubUser: "ada",
       license: "ISC",
       description: "An interactive package.",
     });
     expect(prompts).toEqual([
       "Package name: ",
-      "Profile [node-library]: ",
-      "CLI [no]: ",
-      "Node engines [>=24]: ",
       "Author name: ",
-      "Author email: ",
       "GitHub user: ",
       "License [MIT]: ",
       "Description [A TypeScript package.]: ",
@@ -364,25 +312,15 @@ describe("bootstrap validation", () => {
     const output = execFileSync(process.execPath, ["scripts/bootstrap.mjs"], {
       cwd: root,
       encoding: "utf8",
-      input:
-        [
-          "interactive-package",
-          "",
-          "",
-          "",
-          "Ada Lovelace",
-          "ada@example.com",
-          "ada",
-          "",
-          "",
-        ].join("\n") + "\n",
+      input: ["interactive-package", "Ada Lovelace", "ada", "", ""].join("\n") + "\n",
     });
 
-    expect(output).toContain("Bootstrapped interactive-package as node-library.");
+    expect(output).toContain("Bootstrapped interactive-package.");
     expect(
       JSON.parse(readFileSync(path.join(root, "package.json"), "utf8")),
     ).toMatchObject({
       name: "interactive-package",
+      author: "Ada Lovelace",
       license: "MIT",
       description: "A TypeScript package.",
     });
@@ -392,12 +330,8 @@ describe("bootstrap validation", () => {
     expect(() =>
       parseArguments([
         "acme-library",
-        "--profile",
-        "node-library",
         "--author",
         "Ada Lovelace",
-        "--email",
-        "ada@example.com",
         "--github-user",
         "ada",
         "--license",
@@ -409,10 +343,10 @@ describe("bootstrap validation", () => {
   });
 });
 
-describe("bootstrap profiles", () => {
-  it("rejects browser-only APIs in a generated Node package's build", () => {
+describe("bootstrap generation", () => {
+  it("rejects browser-only APIs in a generated package's build", () => {
     const root = copyTemplate();
-    bootstrap(root, options("node-build-contract", "node-library"));
+    bootstrap(root, options("node-build-contract"));
     symlinkSync(
       path.join(repoRoot, "node_modules"),
       path.join(root, "node_modules"),
@@ -439,67 +373,7 @@ describe("bootstrap profiles", () => {
     expect(result.stdout).toContain("document");
   });
 
-  it.each([
-    [
-      'import { readFileSync } from "node:fs"; export const probe: typeof readFileSync = readFileSync;\n',
-      "no-restricted-imports",
-    ],
-    [
-      'import { readFileSync } from "fs"; export const probe: typeof readFileSync = readFileSync;\n',
-      "no-restricted-imports",
-    ],
-    ["export const probe: string = process.version;\n", "no-restricted-globals"],
-  ])("rejects Node dependencies in universal source: %s", async (source, rule) => {
-    const root = copyTemplate();
-    bootstrap(root, options("universal-lint-contract", "universal-library"));
-    symlinkSync(
-      path.join(repoRoot, "node_modules"),
-      path.join(root, "node_modules"),
-      "junction",
-    );
-    writeFileSync(path.join(root, "src", "probe.ts"), source);
-    const eslint = new ESLint({ cwd: root });
-    const results = await eslint.lintFiles(["src/probe.ts"]);
-
-    expect(
-      results.flatMap((result) => result.messages).map((message) => message.ruleId),
-    ).toContain(rule);
-  });
-
-  it("allows DOM APIs in a generated universal package's build", () => {
-    const root = copyTemplate();
-    bootstrap(root, options("universal-build-contract", "universal-library"));
-    symlinkSync(
-      path.join(repoRoot, "node_modules"),
-      path.join(root, "node_modules"),
-      "junction",
-    );
-    writeFileSync(
-      path.join(root, "src", "probe.ts"),
-      'export const probe: HTMLElement = document.createElement("div");\n',
-    );
-    const result = spawnSync(
-      process.execPath,
-      [
-        path.join(repoRoot, "node_modules/typescript/bin/tsc"),
-        "-p",
-        "tsconfig.build.json",
-        "--noEmit",
-      ],
-      {
-        cwd: root,
-        encoding: "utf8",
-      },
-    );
-    expect(result.status).toBe(0);
-    expect(result.stdout).toBe("");
-    expect(result.stderr).toBe("");
-  });
-  it.each([
-    ["acme-library", "node-library", "no"],
-    ["acme-cli", "node-library", "yes"],
-    ["browser-kit", "universal-library", "no"],
-  ] as const)("generates %s as %s (%s CLI)", async (packageName, profile, cli) => {
+  it.each(["acme-library", "@acme/widgets"])("generates %s", async (packageName) => {
     const root = copyTemplate();
     const binaryBefore = readFileSync(
       path.join(root, "tests", "fixtures", "binary.dat"),
@@ -514,13 +388,18 @@ describe("bootstrap profiles", () => {
           !file.includes("/skills/bootstrapping-the-template/"),
       )
       .map((file) => [file, readFileSync(path.join(root, file), "utf8")] as const);
-    bootstrap(root, options(packageName, profile, cli));
+    const buildConfigBefore = readFileSync(
+      path.join(root, "tsconfig.build.json"),
+      "utf8",
+    );
+    bootstrap(root, options(packageName));
 
     const manifest = JSON.parse(
       readFileSync(path.join(root, "package.json"), "utf8"),
     ) as {
       name: string;
       version: string;
+      author: string;
       packageManager?: string;
       dependencies?: Record<string, string>;
       bin?: Record<string, string>;
@@ -531,6 +410,7 @@ describe("bootstrap profiles", () => {
     };
     expect(manifest.name).toBe(packageName);
     expect(manifest.version).toBe("0.0.0");
+    expect(manifest.author).toBe("Ada Lovelace");
     // Corepack and Dependabot read this field and both need an exact version.
     expect(manifest.packageManager).toBe("pnpm@11.18.0");
     expect(manifest.devEngines.runtime.onFail).toBe("error");
@@ -562,7 +442,7 @@ describe("bootstrap profiles", () => {
     expect(generatedAgentsMd).not.toContain("bootstrapping-the-template");
     expect(generatedAgentsMd).not.toContain("bootstrap:e2e");
     expect(readFileSync(path.join(root, "CONTRIBUTING.md"), "utf8")).not.toContain(
-      "Bootstrap profiles",
+      "bootstrap:check",
     );
     const changelog = readFileSync(path.join(root, "CHANGELOG.md"), "utf8");
     expect(changelog).not.toMatch(/^## /m);
@@ -593,9 +473,12 @@ describe("bootstrap profiles", () => {
     expect(
       existsSync(path.join(root, ".github", "workflows", "check-pr-title.yml")),
     ).toBe(true);
-    expect(
-      readFileSync(path.join(root, ".github", "workflows", "ci.yml"), "utf8"),
-    ).not.toContain("bootstrap:e2e");
+    const workflow = readFileSync(
+      path.join(root, ".github", "workflows", "ci.yml"),
+      "utf8",
+    );
+    expect(workflow).not.toContain("bootstrap:e2e");
+    expect(workflow).not.toContain("  package-floor:");
     expect(
       existsSync(
         path.join(
@@ -611,35 +494,17 @@ describe("bootstrap profiles", () => {
     expect(existsSync(path.join(root, "scripts", "lib", "is-main.mjs"))).toBe(true);
     expect(existsSync(path.join(root, "scripts", "lib", "json.mjs"))).toBe(true);
 
-    if (cli === "yes") {
-      expect(manifest.bin).toEqual({ [packageName]: "./dist/cli.js" });
-      expect(readFileSync(path.join(root, "src", "cli.ts"), "utf8")).toContain(
-        "Usage:",
-      );
-    } else {
-      expect(manifest.bin).toBeUndefined();
-      expect(existsSync(path.join(root, "src", "cli.ts"))).toBe(false);
-    }
+    // The sample command entry is not part of a generated repository.
+    expect(manifest.bin).toBeUndefined();
+    expect(existsSync(path.join(root, "src", "cli.ts"))).toBe(false);
+    expect(existsSync(path.join(root, "tests", "cli.test.ts"))).toBe(false);
     expect(manifest.sideEffects).toBe(false);
 
-    const buildConfig = readFileSync(path.join(root, "tsconfig.build.json"), "utf8");
-    const workflow = readFileSync(
-      path.join(root, ".github", "workflows", "ci.yml"),
-      "utf8",
+    // One shape: the build config and the Node floor are the template's own.
+    expect(readFileSync(path.join(root, "tsconfig.build.json"), "utf8")).toBe(
+      buildConfigBefore,
     );
-    expect(workflow).not.toContain("# bootstrap-node-floor");
-    if (profile === "universal-library") {
-      expect(buildConfig).toContain('"types": []');
-      expect(buildConfig).toContain('"DOM"');
-      expect(manifest.engines).toBeUndefined();
-      // No published floor means no floor for this job to verify.
-      expect(workflow).not.toContain("  package-floor:");
-    } else {
-      expect(buildConfig).toContain('"types": ["node"]');
-      expect(manifest.engines).toEqual({ node: ">=24" });
-      const packageFloor = workflow.slice(workflow.indexOf("  package-floor:"));
-      expect(packageFloor).toContain("node-version: 24");
-    }
+    expect(manifest.engines).toEqual({ node: ">=24" });
 
     // A `template-only` block at end of file (see #111) or a re-padded
     // Markdown table (see #103) both leave the generated tree failing its
@@ -648,61 +513,21 @@ describe("bootstrap profiles", () => {
     await assertGeneratedTreeIsFormatted(root);
   });
 
-  it("writes a selected Node floor and the matching compatibility leg", async () => {
-    const root = copyTemplate();
-    bootstrap(root, options("node-20-package", "node-library", "no", ">=20"));
-
-    const manifest = JSON.parse(
-      readFileSync(path.join(root, "package.json"), "utf8"),
-    ) as { engines?: Record<string, string> };
-    expect(manifest.engines).toEqual({ node: ">=20" });
-    const workflow = readFileSync(
-      path.join(root, ".github", "workflows", "ci.yml"),
-      "utf8",
-    );
-    expect(workflow).not.toContain("# bootstrap-node-floor");
-    const packageFloor = workflow.slice(workflow.indexOf("  package-floor:"));
-    expect(packageFloor).toContain("node-version: 20");
-    expect(packageFloor).toContain(
-      "pnpm --config.runtime-on-fail=ignore run package:smoke",
-    );
-
-    await assertGeneratedTreeIsFormatted(root);
-  });
-
   // #113: bootstrap does a literal string substitution of the template's
   // `my-package` placeholder, not a re-format, so a file that hand-wraps
   // prose or hard-codes a `my-package`-length assumption can overflow
   // Prettier's printWidth once the substituted name is long enough —
   // regardless of which specific fixture name the rest of this suite happens
-  // to use. `acme-library`/`browser-kit` above only ever exercise short
-  // names; this exercises the actual boundary, an npm package name at its
-  // 214-character maximum (a scope counts toward that limit).
-  it.each(["node-library", "universal-library"] as const)(
-    "keeps the generated tree Prettier-clean for a package name at npm's 214-character limit (%s)",
-    async (profile) => {
-      const packageName = `@${"a".repeat(105)}/${"b".repeat(107)}`;
-      expect(packageName).toHaveLength(214);
-      const root = copyTemplate();
-      bootstrap(root, options(packageName, profile));
-      expect(findPlaceholders(root)).toEqual([]);
-      await assertGeneratedTreeIsFormatted(root);
-    },
-  );
-
-  // npm exposes a bin object's key as the command name, and a scoped package's
-  // command is its unscoped half — `npx @acme/widget-cli` runs `widget-cli`.
-  // Keying the object by the full scoped name would declare a command nobody
-  // can type.
-  it("names the generated CLI command after the unscoped package name", () => {
+  // to use. `acme-library` above only ever exercises a short name; this
+  // exercises the actual boundary, an npm package name at its 214-character
+  // maximum (a scope counts toward that limit).
+  it("keeps the generated tree Prettier-clean for a package name at npm's 214-character limit", async () => {
+    const packageName = `@${"a".repeat(105)}/${"b".repeat(107)}`;
+    expect(packageName).toHaveLength(214);
     const root = copyTemplate();
-
-    bootstrap(root, options("@acme/widget-cli", "node-library", "yes"));
-
-    const manifest = JSON.parse(
-      readFileSync(path.join(root, "package.json"), "utf8"),
-    ) as { bin?: Record<string, string> };
-    expect(manifest.bin).toEqual({ "widget-cli": "./dist/cli.js" });
+    bootstrap(root, options(packageName));
+    expect(findPlaceholders(root)).toEqual([]);
+    await assertGeneratedTreeIsFormatted(root);
   });
 
   it("rewrites only explicit targets", () => {
@@ -710,7 +535,7 @@ describe("bootstrap profiles", () => {
     const untouched = path.join(root, "unlisted-placeholder.txt");
     writeFileSync(untouched, "my-package");
 
-    bootstrap(root, options("explicit-library", "node-library"));
+    bootstrap(root, options("explicit-library"));
 
     expect(readFileSync(untouched, "utf8")).toBe("my-package");
     expect(findPlaceholders(root)).toEqual([]);
@@ -720,7 +545,7 @@ describe("bootstrap profiles", () => {
     const root = copyTemplate();
     const before = readFileSync(path.join(root, "package.json"), "utf8");
     const changed = bootstrap(root, {
-      ...options("dry-library", "node-library"),
+      ...options("dry-library"),
       dryRun: true,
     });
     expect(changed.length).toBeGreaterThan(0);
@@ -738,7 +563,7 @@ describe("bootstrap profiles", () => {
 
     expect(() =>
       bootstrap(root, {
-        ...options("invalid-dry-run", "node-library"),
+        ...options("invalid-dry-run"),
         dryRun: true,
       }),
     ).toThrow(/ERR_AI_LAYER_REFERENCE/);
@@ -753,9 +578,9 @@ describe("bootstrap profiles", () => {
       `${readFileSync(agents, "utf8")}\nSee \`scripts/does-not-exist.mjs\` for details.\n`,
     );
 
-    expect(() =>
-      bootstrap(root, options("dangling-reference", "node-library")),
-    ).toThrow(/AGENTS\.md: dangling reference `scripts\/does-not-exist\.mjs`/);
+    expect(() => bootstrap(root, options("dangling-reference"))).toThrow(
+      /AGENTS\.md: dangling reference `scripts\/does-not-exist\.mjs`/,
+    );
   });
 
   it("does not treat an ESLint config block name in inline code as a path", () => {
@@ -770,9 +595,7 @@ describe("bootstrap profiles", () => {
       `${readFileSync(agents, "utf8")}\nThe \`public-api/internal-stays-private\` block enforces it.\n`,
     );
 
-    expect(() =>
-      bootstrap(root, options("eslint-block-name", "node-library")),
-    ).not.toThrow();
+    expect(() => bootstrap(root, options("eslint-block-name"))).not.toThrow();
   });
 
   it("still rejects a Markdown reference to a path bootstrap itself removes", () => {
@@ -786,7 +609,7 @@ describe("bootstrap profiles", () => {
       `${readFileSync(agents, "utf8")}\nSee \`scripts/bootstrap.mjs\` for details.\n`,
     );
 
-    expect(() => bootstrap(root, options("removed-reference", "node-library"))).toThrow(
+    expect(() => bootstrap(root, options("removed-reference"))).toThrow(
       /AGENTS\.md: dangling reference `scripts\/bootstrap\.mjs`/,
     );
   });
@@ -807,9 +630,7 @@ describe("bootstrap profiles", () => {
       `${readFileSync(agents, "utf8")}\nSee \`github.com/owner/repo/blob/main/README.md\` for details.\n`,
     );
 
-    expect(() =>
-      bootstrap(root, options("schemeless-url", "node-library")),
-    ).not.toThrow();
+    expect(() => bootstrap(root, options("schemeless-url"))).not.toThrow();
   });
 
   it("does not treat a backticked bare extensionless hostname as a dangling path (#108)", () => {
@@ -824,9 +645,7 @@ describe("bootstrap profiles", () => {
       `${readFileSync(agents, "utf8")}\nSee \`example.com/path\` for details.\n`,
     );
 
-    expect(() =>
-      bootstrap(root, options("bare-hostname", "node-library")),
-    ).not.toThrow();
+    expect(() => bootstrap(root, options("bare-hostname"))).not.toThrow();
   });
 
   it("still classifies `.claude/settings.local.json` as a path, not as hostname-shaped (#108)", () => {
@@ -842,9 +661,7 @@ describe("bootstrap profiles", () => {
       `${readFileSync(agents, "utf8")}\nSee \`.claude/settings.local.json\` for details.\n`,
     );
 
-    expect(() =>
-      bootstrap(root, options("dotfile-exempt", "node-library")),
-    ).not.toThrow();
+    expect(() => bootstrap(root, options("dotfile-exempt"))).not.toThrow();
   });
 
   it("still reports a dangling reference under a multi-dot dotfile first segment (#108)", () => {
@@ -861,7 +678,7 @@ describe("bootstrap profiles", () => {
       `${readFileSync(agents, "utf8")}\nSee \`.prettierrc.json/overrides\` for details.\n`,
     );
 
-    expect(() => bootstrap(root, options("multi-dot-dotfile", "node-library"))).toThrow(
+    expect(() => bootstrap(root, options("multi-dot-dotfile"))).toThrow(
       /AGENTS\.md: dangling reference `\.prettierrc\.json\/overrides`/,
     );
   });
@@ -871,30 +688,27 @@ describe("bootstrap profiles", () => {
     ["present", true],
   ] as const)(
     "reports a dangling reference under a gitignored build directory whether or not that directory is %s in the checkout (#106)",
-    (_label, createDocsDirectory) => {
-      // `docs/` is gitignored build output (`pnpm docs:build`): it exists in a
+    (_label, createDistDirectory) => {
+      // `dist/` is gitignored build output (`pnpm build`): it exists in a
       // developer checkout that has built it and does not exist in a fresh
       // clone or the git-ls-files-based fixture this suite normally builds.
       // A dangling reference under it must be reported either way — the
       // filename has an extension, so shape (rule 3) classifies it as a path
       // before the filesystem is ever consulted.
       const root = copyTemplate();
-      if (createDocsDirectory) {
-        mkdirSync(path.join(root, "docs"), { recursive: true });
+      if (createDistDirectory) {
+        mkdirSync(path.join(root, "dist"), { recursive: true });
       }
       const agents = path.join(root, "AGENTS.md");
       writeFileSync(
         agents,
-        `${readFileSync(agents, "utf8")}\nSee \`docs/getting-started.md\` for details.\n`,
+        `${readFileSync(agents, "utf8")}\nSee \`dist/getting-started.md\` for details.\n`,
       );
 
       expect(() =>
-        bootstrap(
-          root,
-          options(`docs-dangling-${String(createDocsDirectory)}`, "node-library"),
-        ),
+        bootstrap(root, options(`dist-dangling-${String(createDistDirectory)}`)),
       ).toThrow(
-        /ERR_AI_LAYER_REFERENCE[\s\S]*AGENTS\.md: dangling reference `docs\/getting-started\.md`/,
+        /ERR_AI_LAYER_REFERENCE[\s\S]*AGENTS\.md: dangling reference `dist\/getting-started\.md`/,
       );
     },
   );
@@ -904,24 +718,21 @@ describe("bootstrap profiles", () => {
     ["present", true],
   ] as const)(
     "skips every dangling-reference exemption, under either trailing-slash spelling, whether the target directory is %s (#106)",
-    (_label, createDocsDirectory) => {
+    (_label, createDistDirectory) => {
       const root = copyTemplate();
-      if (createDocsDirectory) {
-        mkdirSync(path.join(root, "docs", "api"), { recursive: true });
+      if (createDistDirectory) {
+        mkdirSync(path.join(root, "dist"), { recursive: true });
       }
       const agents = path.join(root, "AGENTS.md");
       writeFileSync(
         agents,
         `${readFileSync(agents, "utf8")}\n` +
-          "Exempt references: `dist/`, `docs/`, `docs/api`, `docs/api/`, " +
+          "Exempt references: `dist`, `dist/`, `docs/`, `dist/cli.js`, " +
           "`.claude/settings.local.json`, `secrets/`.\n",
       );
 
       expect(() =>
-        bootstrap(
-          root,
-          options(`docs-exempt-${String(createDocsDirectory)}`, "node-library"),
-        ),
+        bootstrap(root, options(`dist-exempt-${String(createDistDirectory)}`)),
       ).not.toThrow();
     },
   );
@@ -940,9 +751,9 @@ describe("bootstrap profiles", () => {
     );
     const packageJsonBefore = readFileSync(path.join(root, "package.json"), "utf8");
 
-    expect(() =>
-      bootstrap(root, options("untouched-on-failure", "node-library")),
-    ).toThrow(BootstrapError);
+    expect(() => bootstrap(root, options("untouched-on-failure"))).toThrow(
+      BootstrapError,
+    );
 
     expect(existsSync(path.join(root, "scripts", "bootstrap.mjs"))).toBe(true);
     expect(readFileSync(path.join(root, "package.json"), "utf8")).toBe(
@@ -962,9 +773,7 @@ describe("bootstrap profiles", () => {
       "See `scripts/only-in-worktree.mjs` for details.\n",
     );
 
-    expect(() =>
-      bootstrap(root, options("worktree-ignored", "node-library")),
-    ).not.toThrow();
+    expect(() => bootstrap(root, options("worktree-ignored"))).not.toThrow();
   });
 
   it.each(["docs/product", "docs/design"])(
@@ -978,9 +787,7 @@ describe("bootstrap profiles", () => {
         "Later work creates `src/not-yet-created.ts`.\n",
       );
 
-      expect(() =>
-        bootstrap(root, options("planning-record-skip", "node-library")),
-      ).not.toThrow();
+      expect(() => bootstrap(root, options("planning-record-skip"))).not.toThrow();
     },
   );
 
@@ -996,9 +803,9 @@ describe("bootstrap profiles", () => {
         `${before}\nLater work creates \`src/not-yet-created.ts\`.\n`,
       );
 
-      expect(() =>
-        bootstrap(root, options("planning-record-scanned", "node-library")),
-      ).toThrow(/dangling reference `src\/not-yet-created\.ts`/);
+      expect(() => bootstrap(root, options("planning-record-scanned"))).toThrow(
+        /dangling reference `src\/not-yet-created\.ts`/,
+      );
     },
   );
 
@@ -1019,9 +826,7 @@ describe("bootstrap profiles", () => {
         "<!-- template-only:end -->\n",
     );
 
-    expect(() =>
-      bootstrap(root, options("nested-basename", "node-library")),
-    ).not.toThrow();
+    expect(() => bootstrap(root, options("nested-basename"))).not.toThrow();
   });
 
   it("does not depend on package-manager or staging processes", () => {
@@ -1042,12 +847,8 @@ describe("bootstrap profiles", () => {
     const description = 'A $& "quoted" package.\nWith a second line.';
     const parsed = parseArguments([
       "quoted-package",
-      "--profile",
-      "node-library",
       "--author",
       'Ada "The Great"',
-      "--email",
-      "ada+tag@example.com",
       "--github-user",
       "ada",
       "--license",
@@ -1062,7 +863,7 @@ describe("bootstrap profiles", () => {
       readFileSync(path.join(root, "package.json"), "utf8"),
     ) as { author: string; description: string };
     expect(manifest).toMatchObject({
-      author: 'Ada "The Great" <ada+tag@example.com>',
+      author: 'Ada "The Great"',
       description,
     });
     expect(readFileSync(path.join(root, "README.md"), "utf8")).toContain(description);
@@ -1072,12 +873,8 @@ describe("bootstrap profiles", () => {
     const root = copyTemplate();
     const isc = parseArguments([
       "licensed-package",
-      "--profile",
-      "node-library",
       "--author",
       "Ada Lovelace",
-      "--email",
-      "ada@example.com",
       "--github-user",
       "ada",
       "--license",
@@ -1101,7 +898,7 @@ describe("bootstrap profiles", () => {
 
   it("uses the injected year in the generated MIT license", () => {
     const root = copyTemplate();
-    bootstrap(root, options("mit-package", "node-library"), { year: 2042 });
+    bootstrap(root, options("mit-package"), { year: 2042 });
 
     expect(readFileSync(path.join(root, "LICENSE"), "utf8")).toContain(
       "Copyright (c) 2042 Ada Lovelace",
@@ -1110,11 +907,9 @@ describe("bootstrap profiles", () => {
 
   it("refuses a second run without changing generated files", () => {
     const root = copyTemplate();
-    bootstrap(root, options("once-only", "node-library"));
+    bootstrap(root, options("once-only"));
     const before = readFileSync(path.join(root, "package.json"), "utf8");
-    expect(() => bootstrap(root, options("twice", "node-library"))).toThrow(
-      /ERR_ALREADY_BOOTSTRAPPED/,
-    );
+    expect(() => bootstrap(root, options("twice"))).toThrow(/ERR_ALREADY_BOOTSTRAPPED/);
     expect(readFileSync(path.join(root, "package.json"), "utf8")).toBe(before);
   });
 });

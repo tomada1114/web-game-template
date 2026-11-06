@@ -116,7 +116,6 @@ export default defineConfig([
   globalIgnores([
     "dist/",
     "coverage/",
-    "docs/api/",
     ".claude/skills/",
     ".claude/worktrees/",
     "tests/fixtures/",
@@ -265,7 +264,7 @@ export default defineConfig([
 
       // An assertion outside a test reports nothing when it fails, and a test
       // with no assertion passes whatever the code does. `expectTypeOf` is
-      // listed because tests/types.test.ts asserts entirely at compile time —
+      // listed because a type test asserts entirely at compile time —
       // those tests have no runtime `expect` and are not meant to.
       "vitest/no-standalone-expect": "error",
       "vitest/expect-expect": [

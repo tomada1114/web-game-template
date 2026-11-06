@@ -11,7 +11,7 @@ the source of truth for those, and running the gate is how you learn them.
 Neither are the conventions of a particular kind of work. Those live in the skills under
 `.agents/skills/`, one per kind of change, and load when the work you are doing calls
 for them — see [Skills](#skills) for the index. What is left in this file is what has to
-be true _before_ you know which task you are on: what this package is, how to check a
+be true _before_ you know which task you are on: what this repository is, how to check a
 change, and which decisions need a human.
 
 **Never hand-edit `.claude/skills/`** — it is a generated mirror, and a change there is
@@ -20,61 +20,53 @@ checked.
 
 ## Overview
 
-An ESM-only TypeScript package published to npm. Development runs on Node >= 24, while a
-generated `node-library` chooses its published `engines.node` floor during bootstrap.
-pnpm 11 is the package manager, used through Corepack. A package may also ship one
-command entry in `src/cli.ts`; that command is not an import surface.
+A template for a TypeScript browser game. Nothing here is published to npm: to publish
+means pushing a release tag or uploading a build to a game portal. Development and CI
+run on Node >= 24, and pnpm 11 is the package manager, used through Corepack. The sample
+command entry in `src/cli.ts` is not an import surface.
 
 ## Quick reference
 
 ```sh
 pnpm check:quick   # format check, lint, typecheck, tests — the everyday gate
-pnpm check         # the full gate, including build, docs, and packaging
+pnpm check         # the full gate: the checks above with coverage, then the build
 pnpm fix           # ESLint autofix, then Prettier
 pnpm test          # tests only
 pnpm test:coverage # tests with the coverage thresholds enforced
 pnpm build         # emit dist/ from src/
-pnpm package:check # build and pack once, then run every artifact check
-pnpm package:smoke # install the tarball into throwaway consumers and run it
-pnpm docs:build    # TypeDoc into docs/api/
 pnpm agents:sync   # regenerate .claude/skills/ from .agents/skills/
 pnpm agents:check  # fail when the two skill trees have drifted apart
 pnpm repo:labels   # create/update GitHub labels from .github/labels.yml
-pnpm bootstrap:e2e # run scripts/bootstrap.mjs end to end for every profile
-pnpm bootstrap:check # install and run the full gate in every generated profile
+pnpm bootstrap:e2e # run scripts/bootstrap.mjs end to end on a copy
+pnpm bootstrap:check # the same, then install and run the full gate in the generated repository
 ```
 
 Run a single test file with `pnpm exec vitest run tests/<name>.test.ts`.
 
-`pnpm check:quick` is the full local source gate, and CI runs those source/package
-checks as separate steps, so a green run here means those are green too. `lefthook`'s
-pre-commit hook runs a staged-file-scoped version of the same tools — format applied
-rather than merely checked, tests limited to the ones reachable from the staged files —
-before every commit. Nothing — not a hook, not a workflow — defines a check of its own;
-they all call these scripts.
+`pnpm check:quick` is the full local source gate, and CI runs those source checks as
+separate steps, so a green run here means those are green too. `lefthook`'s pre-commit
+hook runs a staged-file-scoped version of the same tools — format applied rather than
+merely checked, tests limited to the ones reachable from the staged files — before every
+commit. Nothing — not a hook, not a workflow — defines a check of its own; they all call
+these scripts.
 
-Development and source checks stay on Node 24. A generated `node-library` may publish a
-different bare `>=N` floor through bootstrap's `--node-engines` option (default `>=24`);
-the `package-floor` CI job builds and packs on Node 24, then consumes that artifact with
-`pnpm --config.runtime-on-fail=ignore run package:smoke -- --pack-dir .smoke` on the
-selected floor. The override is only for that compatibility check. Never relax
-`devEngines.runtime`'s `onFail: error` for normal development or source checks.
+Development and source checks stay on Node 24. Never relax `devEngines.runtime`'s
+`onFail: error`.
 
 ## Validating a change
 
 Run the narrowest check that can fail, then the gate. Reaching for `pnpm check` on every
 edit is slow enough that it stops being run at all.
 
-| What you changed                       | The narrowest check that can fail                                                 |
-| -------------------------------------- | --------------------------------------------------------------------------------- |
-| A module under `src/`                  | `pnpm exec vitest run tests/<module>.test.ts`                                     |
-| Anything reachable from `src/index.ts` | `pnpm check` — only `package:smoke` sees the published `.d.ts` as a consumer does |
-| A test                                 | `pnpm exec vitest run tests/<name>.test.ts`                                       |
-| A script under `scripts/`              | `pnpm exec vitest run tests/<script>.test.ts`                                     |
-| TSDoc comments                         | `pnpm docs:build`                                                                 |
-| A skill under `.agents/skills/`        | `pnpm agents:sync && pnpm agents:check && pnpm test`                              |
-| `package.json`, `pnpm-workspace.yaml`  | `pnpm install`, then `pnpm check`                                                 |
-| Markdown                               | `pnpm fix`                                                                        |
+| What you changed                       | The narrowest check that can fail                    |
+| -------------------------------------- | ---------------------------------------------------- |
+| A module under `src/`                  | `pnpm exec vitest run tests/<module>.test.ts`        |
+| Anything reachable from `src/index.ts` | `pnpm check`                                         |
+| A test                                 | `pnpm exec vitest run tests/<name>.test.ts`          |
+| A script under `scripts/`              | `pnpm exec vitest run tests/<script>.test.ts`        |
+| A skill under `.agents/skills/`        | `pnpm agents:sync && pnpm agents:check && pnpm test` |
+| `package.json`, `pnpm-workspace.yaml`  | `pnpm install`, then `pnpm check`                    |
+| Markdown                               | `pnpm fix`                                           |
 
 ## Architecture
 
@@ -86,11 +78,8 @@ src/
 └── *.ts          # implementation modules, re-exported by name from index.ts
 ```
 
-`src/index.ts` is the single consumer-importable entry point of the published contract.
-`src/cli.ts` may additionally be the command entry named by `package.json#bin`, but it
-is not an import surface. `scripts/*.mjs` is repository automation that never ships.
-What may appear on the import surface, and what a change to it obliges, are the
-`public-api-contract` and `release-impact` skills.
+`src/index.ts` is the single importable entry point. `src/cli.ts` is a command entry,
+not an import surface. `scripts/*.mjs` is repository automation that never ships.
 
 ## Skills
 
@@ -103,9 +92,6 @@ names its own boundary with its neighbours.
 | `designing-errors`           | an error type or an `ERR_*` code, in `src/` or `scripts/`                             |
 | `writing-tests`              | the body of a test under `tests/`                                                     |
 | `placing-tests`              | a new test file, a vitest project, or a coverage floor                                |
-| `type-testing`               | `tests/types.test.ts` and `expectTypeOf`                                              |
-| `public-api-contract`        | `src/index.ts`, `src/internal/`, or `exports`/`files`                                 |
-| `release-impact`             | a PR body, its semver consequence, a `CHANGELOG.md` entry                             |
 | `writing-repo-scripts`       | a `.mjs` under `scripts/`                                                             |
 | `bootstrapping-the-template` | the bootstrap flow, its profiles, or `pnpm bootstrap:e2e`                             |
 | `authoring-skills`           | a skill under `.agents/skills/`                                                       |
@@ -120,16 +106,17 @@ names its own boundary with its neighbours.
 
 - **Commit, push, pull request, and publish always need a human.** No file this
   repository ships blocks the dangerous spellings — `--no-verify`, a plain force-push,
-  `npm`/`pnpm publish`, workflow dispatch — mechanically; this instruction is the rule
-  itself, not a pattern enforcing it. An agent may still carry its own personal
-  permission settings on top (a Claude Code session's own `~/.claude/settings.json`, for
-  instance), but that is a choice made outside this repository, not something it ships
-  or requires.
+  `npm`/`pnpm publish`, pushing a release tag, a portal upload, workflow dispatch —
+  mechanically; this instruction is the rule itself, not a pattern enforcing it. An
+  agent may still carry its own personal permission settings on top (a Claude Code
+  session's own `~/.claude/settings.json`, for instance), but that is a choice made
+  outside this repository, not something it ships or requires.
 - Never read or write `.env*` (the `.example`, `.sample` and `.template` variants are
   fine) or anything under `secrets/`.
 - Never write a credential into a tracked file — no registry auth token, no private key.
-- Every pull request states whether a release is required; `release-impact` holds the
-  two literal forms and the semver call.
+- Every pull request states whether a release is required, with `Release: none` or
+  `Release: needed — <reason>` from `.github/PULL_REQUEST_TEMPLATE.md`;
+  `releasing-builds` holds when each applies.
 - `pnpm-lock.yaml` is generated by `pnpm install`, never hand-edited;
   `managing-dependencies` holds the reasoning.
 - Never weaken a gate to make a run pass: no lowered coverage threshold in

@@ -11,8 +11,8 @@ description: >
 # Updating Documentation
 
 **Owns:** whether a change needs a documentation update, and which surface it lands on.
-**Does not own:** the release-impact note and CHANGELOG entries (`release-impact`);
-TSDoc release tags (`public-api-contract`).
+**Does not own:** the PR body's release line and CHANGELOG entries (`releasing-builds`);
+what the game core exports (`writing-game-core` § API and state).
 
 ## Decide on observability, not location
 
@@ -32,26 +32,25 @@ When a change is user-observable, sweep every surface it touches — do not stop
 first one that seems relevant:
 
 - The README example, if the change affects what it shows.
-- The affected pages under `docs/**` (hand-written pages, not `docs/api/`).
+- The affected pages under `docs/**`.
 - TSDoc comments in `src/**` for the symbol that changed.
-- CHANGELOG.md, when the change implies a release. **REQUIRED:** follow `release-impact`
-  for the note and the entry itself; this skill only flags that one is owed.
+- CHANGELOG.md, when the change implies a release. **REQUIRED:** follow
+  `releasing-builds` for the release line and the entry itself; this skill only flags
+  that one is owed.
 
-**REQUIRED:** `release-impact`'s same-PR checklist is what requires the README example
-and any affected `docs/` page to land in the same pull request as a public-API change;
-this skill decides which surface the update belongs on, not whether one is owed.
+The README example and any affected `docs/` page land in the same pull request as the
+change they describe; this skill decides which surface the update belongs on.
 
 ## Purpose per file
 
 Each file has one job; do not blur them:
 
 - `README.md` — the value proposition readable in 30 seconds, the install command, a
-  minimal working example, supported Node/runtime versions, and a pointer to the full
-  API reference. Nothing more.
+  minimal working example, and supported Node/runtime versions. Nothing more.
 - `CONTRIBUTING.md` — local setup, the main `pnpm` commands, how to run tests, release
   intent, and the PR process.
-- `CHANGELOG.md` — owned by release pull requests; `release-impact` holds its
-  categories, its Prettier-ignore, and how an entry is worded.
+- `CHANGELOG.md` — owned by release pull requests; `releasing-builds` holds how an entry
+  is worded.
 
 ## What belongs in prose
 
@@ -62,17 +61,6 @@ does not need a sentence here.
 
 ## Code examples must compile
 
-Every fenced `ts` example in README.md and every `@example` block in `src/**` is
-compiled against the current public API by `tests/docs.test.ts` — do not invent a second
-synchronization mechanism (a lint rule, a manual checklist item) to cover the same
-ground; that test is the gate. A change to `src/index.ts` that breaks a documented
-snippet fails that test, and the fix is to update the snippet in the same commit as the
-signature change, not to adjust the test.
-
-## Generated trees are off-limits
-
-`docs/api/` is TypeDoc output (`pnpm docs:build`, configured by `typedoc.json`). It is
-generated and gitignored — never hand-edit it, and never include it in a documentation
-sweep. To change what it says, edit the TSDoc comments on the exported symbol in
-`src/**` and regenerate; the generated file itself carries no independent content to
-review.
+No test compiles the fenced `ts` examples in README.md or the `@example` blocks in
+`src/**`, so nothing catches a stale snippet. A change to `src/index.ts` that breaks a
+documented snippet updates that snippet in the same commit as the signature change.

@@ -1,7 +1,6 @@
 # Build output and caches
 dist/
 coverage/
-docs/api/
 node_modules/
 
 # Data under test, not source: a fixture is committed precisely because it is

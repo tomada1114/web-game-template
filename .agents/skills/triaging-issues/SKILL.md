@@ -14,7 +14,7 @@ description: >
 
 **Owns:** this repository's issue vocabulary — the label taxonomy, what a priority
 means, and what an issue body must contain. **Does not own:** implementing an issue, or
-what the resulting pull request must state (`release-impact`); any workflow beyond the
+what the resulting pull request must state (`releasing-builds`); any workflow beyond the
 tracker.
 
 Labels carry the triage decision, so it is made once and read back rather than

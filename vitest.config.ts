@@ -7,30 +7,23 @@ const fixtures = "tests/fixtures/**";
 // Tests that import repository automation, touch the filesystem, spawn a
 // subprocess, or use git. They are listed explicitly so a new test defaults to
 // the short-timeout unit project until its I/O needs are deliberately reviewed.
-// The five files not listed here are pure unit tests; guard-rules.test.ts is the
+// The four files not listed here are pure unit tests; guard-rules.test.ts is the
 // intentional exception to the usual `src/**` rule because it calls the guard
 // engine's pure functions directly.
 const automationTests = [
   "tests/bootstrap.test.ts",
-  "tests/check-attw.test.ts",
-  "tests/check-release-status.test.ts",
   "tests/check-staged.test.ts",
   "tests/ci-sync.test.ts",
   "tests/clean.test.ts",
-  "tests/docs.test.ts",
   "tests/git-env.test.ts",
   "tests/labels.test.ts",
   "tests/node-tools.test.ts",
-  "tests/package-smoke.test.ts",
-  "tests/package.test.ts",
   "tests/skills-frontmatter.test.ts",
-  "tests/smoke-package.test.ts",
   "tests/sync-agents.test.ts",
   "tests/sync-labels.test.ts",
   "tests/template-self.test.ts",
   "tests/tooling-ignores.test.ts",
   "tests/verify-bootstrap.test.ts",
-  "tests/verify-package.test.ts",
   "tests/workflows.test.ts",
 ];
 

@@ -14,8 +14,8 @@ description: >
 
 **Owns:** type-system judgment, naming, and constant placement inside a `src/**/*.ts`
 module. **Does not own:** the shape of an error class (`designing-errors`); what may be
-exported from `src/index.ts` (`public-api-contract`); the `.mjs` files under `scripts/`
-(`writing-repo-scripts`).
+exported from `src/index.ts` (`writing-game-core` § API and state); the `.mjs` files
+under `scripts/` (`writing-repo-scripts`).
 
 ## Naming and constants
 
@@ -74,9 +74,8 @@ exported from `src/index.ts` (`public-api-contract`); the `.mjs` files under `sc
 
 - Annotate the return type of every non-generic export from `src/index.ts`.
 - On a generic export, annotate the return type only if the annotation is provably no
-  wider than what inference would produce, and cover the exported signature with an
-  `expectTypeOf` test in `tests/types.test.ts` either way — a hand-written annotation is
-  the standard way to accidentally widen a generic that should stay preserved.
+  wider than what inference would produce — a hand-written annotation is the standard
+  way to accidentally widen a generic that should stay preserved.
 - Keep exported generics narrow: accept the widest reasonable input, return the
   narrowest true output. `withTimeout` is the worked example — it returns the
   operation's own resolved type instead of widening it to something looser.
@@ -97,11 +96,7 @@ exported from `src/index.ts` (`public-api-contract`); the `.mjs` files under `sc
 
 ## Runtime-agnostic source
 
-- Whether `node:*` imports are allowed in `src/**` depends on the profile this
-  repository was bootstrapped with. Read `tsconfig.build.json`'s
-  `compilerOptions.types`: `["node"]` is the `node-library` profile and `node:` builtins
-  are permitted; `[]` is the `universal-library` profile, where `eslint.config.mjs`
-  registers the universal-profile/no-node-builtins block and rejects both prefixed and
-  bare Node builtin imports and Node globals. Keep Node-only code in a separate package.
-  The build config's explicit `lib` list also keeps browser-only globals out of Node
-  builds; `pnpm typecheck` checks both the repository and source build configs.
+- `node:*` imports are allowed in `src/**`: `tsconfig.build.json`'s
+  `compilerOptions.types` is `["node"]`. The build config's explicit `lib` list also
+  keeps browser-only globals out of Node builds; `pnpm typecheck` checks both the
+  repository and source build configs.

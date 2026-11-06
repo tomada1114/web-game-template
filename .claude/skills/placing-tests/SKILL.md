@@ -12,7 +12,7 @@ description: >
 
 **Owns:** where a new test file goes, which vitest project it joins, and the coverage
 floors that govern it. **Does not own:** how the test itself is written, assertion
-style, and fixtures (`writing-tests`); type tests with `expectTypeOf` (`type-testing`).
+style, and fixtures (`writing-tests`).
 
 ## Location
 

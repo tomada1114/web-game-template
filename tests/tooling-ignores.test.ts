@@ -166,7 +166,7 @@ describe("the generated/ignored tree stays consistent across tooling", () => {
   // Build/doc output nobody commits: .gitignore keeps it out of git
   // entirely, so there is nothing in it for ESLint, Prettier, or typos to
   // usefully check either.
-  const BUILD_OUTPUT = ["dist/", "coverage/", "docs/api/"];
+  const BUILD_OUTPUT = ["dist/", "coverage/"];
 
   // The opposite case: `.claude/skills/` IS tracked (AGENTS.md — both the
   // authored `.agents/skills/` and its generated mirror are committed real
@@ -190,6 +190,19 @@ describe("the generated/ignored tree stays consistent across tooling", () => {
       expect(typosExclude).toContain(entry);
     },
   );
+
+  it("keeps .package/ gitignored and lists no output of the removed npm gates", () => {
+    const prettierLines = readFileSync(path.join(repoRoot, ".prettierignore"), "utf8")
+      .split("\n")
+      .map((line) => line.trim());
+    expect(gitignoreLines).toContain(".package/");
+    // Spelled in two halves so a repository-wide search for the removed tool
+    // finds nothing, the same way LEGACY_RELEASE_DIRECTORY is spelled.
+    for (const removed of [".smoke/", ".at" + "tw/", "docs/api/"]) {
+      expect(gitignoreLines).not.toContain(removed);
+      expect(prettierLines).not.toContain(removed);
+    }
+  });
 
   it("does not gitignore the tracked .claude/skills mirror", () => {
     expect(gitignoreLines).not.toContain(GENERATED_MIRROR);
