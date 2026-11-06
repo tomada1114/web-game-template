@@ -6,7 +6,6 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -21,7 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BootstrapError,
   bootstrap,
-  deriveNames,
+  escapeHtml,
   findPlaceholders,
   normalizeRelativePath,
   parseArguments,
@@ -29,6 +28,7 @@ import {
   removeSelfReferentialLines,
   repadMarkdownTable,
   validatePackageName,
+  validateTitle,
 } from "../scripts/bootstrap.mjs";
 import { copyTemplate as copyTrackedFiles } from "../scripts/verify-bootstrap.mjs";
 
@@ -142,9 +142,14 @@ function aiLayerFiles(root: string): string[] {
   ];
 }
 
-function options(packageName: string): ReturnType<typeof parseArguments> {
+function options(
+  packageName: string,
+  title = "Acme Game",
+): ReturnType<typeof parseArguments> {
   return parseArguments([
     packageName,
+    "--title",
+    title,
     "--author",
     "Ada Lovelace",
     "--github-user",
@@ -162,25 +167,73 @@ afterEach(() => {
 });
 
 describe("bootstrap validation", () => {
+  // The slug also scopes the workspace packages (`@<slug>/core`), so a scope
+  // of its own, or anything outside lowercase kebab case, is refused.
   it.each([
-    "",
-    "../evil",
-    "Uppercase",
-    "@scope",
-    "@scope/",
-    "name with spaces",
-    "node_modules",
-    "a".repeat(215),
-  ])("rejects invalid package name %j", (name) => {
+    ["", "ERR_PACKAGE_NAME_EMPTY"],
+    ["a".repeat(61), "ERR_PACKAGE_NAME_LENGTH"],
+    ["Uppercase", "ERR_PACKAGE_NAME_CASE"],
+    ["../evil", "ERR_PACKAGE_NAME_INVALID"],
+    ["@scope/name", "ERR_PACKAGE_NAME_INVALID"],
+    ["name with spaces", "ERR_PACKAGE_NAME_INVALID"],
+    ["node_modules", "ERR_PACKAGE_NAME_INVALID"],
+    ["dotted.name", "ERR_PACKAGE_NAME_INVALID"],
+    ["double--hyphen", "ERR_PACKAGE_NAME_INVALID"],
+    ["-leading", "ERR_PACKAGE_NAME_INVALID"],
+    ["trailing-", "ERR_PACKAGE_NAME_INVALID"],
+  ])("rejects the slug %j with %s", (name, code) => {
     expect(() => validatePackageName(name)).toThrow(BootstrapError);
+    expect(() => validatePackageName(name)).toThrow(new RegExp(`^${code}:`));
   });
 
-  it("derives safe names for a scoped package", () => {
-    expect(deriveNames("@acme/widgets")).toEqual({
-      unscoped: "widgets",
-      identifier: "widgets",
-      tarball: "acme-widgets",
-    });
+  it.each(["a", "acme-game", "2048", "a".repeat(60)])("accepts the slug %j", (name) => {
+    expect(() => validatePackageName(name)).not.toThrow();
+  });
+
+  it.each([
+    ["", "ERR_TITLE_INVALID"],
+    ["   ", "ERR_TITLE_INVALID"],
+    [" Leading space", "ERR_TITLE_INVALID"],
+    ["Trailing space ", "ERR_TITLE_INVALID"],
+    ['Say "hi"', "ERR_TITLE_INVALID"],
+    ["Back\\slash", "ERR_TITLE_INVALID"],
+    ["Tab\tinside", "ERR_TITLE_INVALID"],
+    ["Delete\u007f", "ERR_TITLE_INVALID"],
+    ["Two  spaces", "ERR_TITLE_INVALID"],
+    ["T".repeat(60), "ERR_TITLE_LENGTH"],
+    // 59 columns raw, 71 once each `&` becomes `&amp;`.
+    [`${"&".repeat(3)}${"T".repeat(56)}`, "ERR_TITLE_LENGTH"],
+    ["ゲ".repeat(30), "ERR_TITLE_LENGTH"],
+  ])("rejects the title %j with %s", (title, code) => {
+    expect(() => validateTitle(title)).toThrow(BootstrapError);
+    expect(() => validateTitle(title)).toThrow(new RegExp(`^${code}:`));
+  });
+
+  it.each(["Acme Game", "Tom & Jerry's <Big> Day", "T".repeat(59), "ゲ".repeat(29)])(
+    "accepts the title %j",
+    (title) => {
+      expect(() => validateTitle(title)).not.toThrow();
+    },
+  );
+
+  it("requires --title", () => {
+    expect(() =>
+      parseArguments([
+        "acme-game",
+        "--author",
+        "Ada Lovelace",
+        "--github-user",
+        "ada",
+        "--license",
+        "MIT",
+      ]),
+    ).toThrow(/ERR_ARGUMENT_REQUIRED: --title is required/);
+  });
+
+  it("escapes the characters an HTML text node cannot hold literally", () => {
+    expect(escapeHtml("Tom & Jerry's <Big> Day")).toBe(
+      "Tom &amp; Jerry's &lt;Big&gt; Day",
+    );
   });
 
   it("normalizes Windows separators without accepting traversal", () => {
@@ -237,6 +290,7 @@ describe("bootstrap validation", () => {
     );
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("--dry-run");
+    expect(result.stdout).toContain("--title");
     expect(result.stdout).not.toMatch(/--(?:profile|cli|node-engines|email)\b/);
     expect(result.stderr).toBe("");
   });
@@ -280,6 +334,7 @@ describe("bootstrap validation", () => {
   it("collects package metadata through the interactive prompts", async () => {
     const answers = [
       "interactive-package",
+      "Interactive Game",
       "Ada Lovelace",
       "ada",
       "ISC",
@@ -293,13 +348,15 @@ describe("bootstrap validation", () => {
 
     expect(parsed).toMatchObject({
       packageName: "interactive-package",
+      title: "Interactive Game",
       author: "Ada Lovelace",
       githubUser: "ada",
       license: "ISC",
       description: "An interactive package.",
     });
     expect(prompts).toEqual([
-      "Package name: ",
+      "Game slug: ",
+      "Display title: ",
       "Author name: ",
       "GitHub user: ",
       "License [MIT]: ",
@@ -312,7 +369,10 @@ describe("bootstrap validation", () => {
     const output = execFileSync(process.execPath, ["scripts/bootstrap.mjs"], {
       cwd: root,
       encoding: "utf8",
-      input: ["interactive-package", "Ada Lovelace", "ada", "", ""].join("\n") + "\n",
+      input:
+        ["interactive-package", "Interactive Game", "Ada Lovelace", "ada", "", ""].join(
+          "\n",
+        ) + "\n",
     });
 
     expect(output).toContain("Bootstrapped interactive-package.");
@@ -324,6 +384,9 @@ describe("bootstrap validation", () => {
       license: "MIT",
       description: "A TypeScript package.",
     });
+    expect(
+      readFileSync(path.join(root, "apps", "web", "src", "game-info.ts"), "utf8"),
+    ).toContain('export const GAME_TITLE = "Interactive Game";');
   });
 
   it("rejects unknown options instead of silently ignoring them", () => {
@@ -344,36 +407,34 @@ describe("bootstrap validation", () => {
 });
 
 describe("bootstrap generation", () => {
-  it("rejects browser-only APIs in a generated package's build", () => {
-    const root = copyTemplate();
-    bootstrap(root, options("node-build-contract"));
-    symlinkSync(
-      path.join(repoRoot, "node_modules"),
-      path.join(root, "node_modules"),
-      "junction",
-    );
-    writeFileSync(
-      path.join(root, "src", "probe.ts"),
+  it.each([
+    [
+      "a DOM global",
       'export const probe = document.createElement("div");\n',
-    );
+      "document",
+    ],
+    ["a Node global", "export const probe = process.version;\n", "process"],
+  ])("rejects %s in a generated repository's core", (_label, source, name) => {
+    const root = copyTemplate();
+    bootstrap(root, options("runtime-free-core"));
+    writeFileSync(path.join(root, "packages", "core", "src", "probe.ts"), source);
+    // Core imports nothing, so its program compiles without an install.
     const result = spawnSync(
       process.execPath,
-      [
-        path.join(repoRoot, "node_modules/typescript/bin/tsc"),
-        "-p",
-        "tsconfig.build.json",
-        "--noEmit",
-      ],
+      [path.join(repoRoot, "node_modules/typescript/bin/tsc"), "-p", "packages/core"],
       {
         cwd: root,
         encoding: "utf8",
       },
     );
     expect(result.status).toBe(2);
-    expect(result.stdout).toContain("document");
+    expect(result.stdout).toContain(`Cannot find name '${name}'`);
   });
 
-  it.each(["acme-library", "@acme/widgets"])("generates %s", async (packageName) => {
+  it.each([
+    ["acme-library", "Acme Library"],
+    ["space-tiles", "Tom & Jerry's <Big> Day"],
+  ])("generates %s titled %j", async (packageName, title) => {
     const root = copyTemplate();
     const binaryBefore = readFileSync(
       path.join(root, "tests", "fixtures", "binary.dat"),
@@ -388,11 +449,11 @@ describe("bootstrap generation", () => {
           !file.includes("/skills/bootstrapping-the-template/"),
       )
       .map((file) => [file, readFileSync(path.join(root, file), "utf8")] as const);
-    const buildConfigBefore = readFileSync(
-      path.join(root, "tsconfig.build.json"),
+    const coreConfigBefore = readFileSync(
+      path.join(root, "packages", "core", "tsconfig.json"),
       "utf8",
     );
-    bootstrap(root, options(packageName));
+    bootstrap(root, options(packageName, title));
 
     const manifest = JSON.parse(
       readFileSync(path.join(root, "package.json"), "utf8"),
@@ -494,16 +555,37 @@ describe("bootstrap generation", () => {
     expect(existsSync(path.join(root, "scripts", "lib", "is-main.mjs"))).toBe(true);
     expect(existsSync(path.join(root, "scripts", "lib", "json.mjs"))).toBe(true);
 
-    // The sample command entry is not part of a generated repository.
     expect(manifest.bin).toBeUndefined();
-    expect(existsSync(path.join(root, "src", "cli.ts"))).toBe(false);
-    expect(existsSync(path.join(root, "tests", "cli.test.ts"))).toBe(false);
     expect(manifest.sideEffects).toBe(false);
 
-    // One shape: the build config and the Node floor are the template's own.
-    expect(readFileSync(path.join(root, "tsconfig.build.json"), "utf8")).toBe(
-      buildConfigBefore,
+    // The slug scopes both workspace packages, and the lockfile records the
+    // workspace dependency under that same name, or a frozen install fails.
+    const workspaceName = (relative: string): unknown =>
+      (JSON.parse(readFileSync(path.join(root, relative), "utf8")) as { name: unknown })
+        .name;
+    expect(workspaceName("packages/core/package.json")).toBe(`@${packageName}/core`);
+    expect(workspaceName("apps/web/package.json")).toBe(`@${packageName}/web`);
+    expect(
+      JSON.parse(readFileSync(path.join(root, "apps", "web", "package.json"), "utf8")),
+    ).toMatchObject({ dependencies: { [`@${packageName}/core`]: "workspace:*" } });
+    const lockfile = readFileSync(path.join(root, "pnpm-lock.yaml"), "utf8");
+    expect(lockfile).toContain(`'@${packageName}/core':`);
+    expect(lockfile).not.toContain("@my-game/");
+
+    const gameInfo = readFileSync(
+      path.join(root, "apps", "web", "src", "game-info.ts"),
+      "utf8",
     );
+    expect(gameInfo).toContain(`export const GAME_SLUG = "${packageName}";`);
+    expect(gameInfo).toContain(`export const GAME_TITLE = "${title}";`);
+    expect(
+      readFileSync(path.join(root, "apps", "web", "index.html"), "utf8"),
+    ).toContain(`<title>${escapeHtml(title)}</title>`);
+
+    // One shape: the core program and the Node floor are the template's own.
+    expect(
+      readFileSync(path.join(root, "packages", "core", "tsconfig.json"), "utf8"),
+    ).toBe(coreConfigBefore);
     expect(manifest.engines).toEqual({ node: ">=24" });
 
     // A `template-only` block at end of file (see #111) or a re-padded
@@ -514,30 +596,35 @@ describe("bootstrap generation", () => {
   });
 
   // #113: bootstrap does a literal string substitution of the template's
-  // `my-package` placeholder, not a re-format, so a file that hand-wraps
-  // prose or hard-codes a `my-package`-length assumption can overflow
-  // Prettier's printWidth once the substituted name is long enough —
-  // regardless of which specific fixture name the rest of this suite happens
-  // to use. `acme-library` above only ever exercises a short name; this
-  // exercises the actual boundary, an npm package name at its 214-character
-  // maximum (a scope counts toward that limit).
-  it("keeps the generated tree Prettier-clean for a package name at npm's 214-character limit", async () => {
-    const packageName = `@${"a".repeat(105)}/${"b".repeat(107)}`;
-    expect(packageName).toHaveLength(214);
-    const root = copyTemplate();
-    bootstrap(root, options(packageName));
-    expect(findPlaceholders(root)).toEqual([]);
-    await assertGeneratedTreeIsFormatted(root);
-  });
+  // placeholders, not a re-format, so a value long enough to push a line past
+  // Prettier's printWidth leaves the generated tree failing its own
+  // `pnpm format:check`. `GAME_SLUG` and `GAME_TITLE` in
+  // apps/web/src/game-info.ts are the tightest lines; this exercises both at
+  // the longest value bootstrap accepts, the title once in ASCII and once in
+  // characters Prettier counts as two columns.
+  it.each([
+    ["an ASCII title", "T".repeat(59)],
+    ["a wide-character title", "ゲ".repeat(29)],
+    // 59 columns raw and 69, the index.html limit, once escaped.
+    ["a title that grows when escaped", `&<${"T".repeat(56)}>`],
+  ])(
+    "keeps the generated tree Prettier-clean for the longest slug and %s",
+    async (_label, title) => {
+      const root = copyTemplate();
+      bootstrap(root, options("a".repeat(60), title));
+      expect(findPlaceholders(root)).toEqual([]);
+      await assertGeneratedTreeIsFormatted(root);
+    },
+  );
 
   it("rewrites only explicit targets", () => {
     const root = copyTemplate();
     const untouched = path.join(root, "unlisted-placeholder.txt");
-    writeFileSync(untouched, "my-package");
+    writeFileSync(untouched, "my-game My Game");
 
     bootstrap(root, options("explicit-library"));
 
-    expect(readFileSync(untouched, "utf8")).toBe("my-package");
+    expect(readFileSync(untouched, "utf8")).toBe("my-game My Game");
     expect(findPlaceholders(root)).toEqual([]);
   });
 
@@ -727,7 +814,7 @@ describe("bootstrap generation", () => {
       writeFileSync(
         agents,
         `${readFileSync(agents, "utf8")}\n` +
-          "Exempt references: `dist`, `dist/`, `docs/`, `dist/cli.js`, " +
+          "Exempt references: `dist`, `dist/`, `docs/`, `apps/web/dist/`, " +
           "`.claude/settings.local.json`, `secrets/`.\n",
       );
 
@@ -847,6 +934,8 @@ describe("bootstrap generation", () => {
     const description = 'A $& "quoted" package.\nWith a second line.';
     const parsed = parseArguments([
       "quoted-package",
+      "--title",
+      "Quoted Game",
       "--author",
       'Ada "The Great"',
       "--github-user",
@@ -873,6 +962,8 @@ describe("bootstrap generation", () => {
     const root = copyTemplate();
     const isc = parseArguments([
       "licensed-package",
+      "--title",
+      "Licensed Game",
       "--author",
       "Ada Lovelace",
       "--github-user",

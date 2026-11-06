@@ -22,8 +22,9 @@ checked.
 
 A template for a TypeScript browser game. Nothing here is published to npm: to publish
 means pushing a release tag or uploading a build to a game portal. Development and CI
-run on Node >= 24, and pnpm 11 is the package manager, used through Corepack. The sample
-command entry in `src/cli.ts` is not an import surface.
+run on Node >= 24, and pnpm 11 is the package manager, used through Corepack. It is a
+pnpm workspace: `packages/core` holds the game rules, and `apps/web` builds them into a
+static site with Vite 8 (see [Architecture](#architecture)).
 
 ## Quick reference
 
@@ -33,7 +34,9 @@ pnpm check         # the full gate: the checks above with coverage, then the bui
 pnpm fix           # ESLint autofix, then Prettier
 pnpm test          # tests only
 pnpm test:coverage # tests with the coverage thresholds enforced
-pnpm build         # emit dist/ from src/
+pnpm typecheck     # tsc -b over every workspace program
+pnpm build         # build apps/web into apps/web/dist
+pnpm dev           # Vite's dev server for apps/web; runs until stopped
 pnpm agents:sync   # regenerate .claude/skills/ from .agents/skills/
 pnpm agents:check  # fail when the two skill trees have drifted apart
 pnpm repo:labels   # create/update GitHub labels from .github/labels.yml
@@ -41,7 +44,9 @@ pnpm bootstrap:e2e # run scripts/bootstrap.mjs end to end on a copy
 pnpm bootstrap:check # the same, then install and run the full gate in the generated repository
 ```
 
-Run a single test file with `pnpm exec vitest run tests/<name>.test.ts`.
+Run one Vitest project with `pnpm exec vitest run --project core` (or `web`, `unit`,
+`automation`), and one file with `pnpm exec vitest run <path>`. There are no per-package
+test scripts.
 
 `pnpm check:quick` is the full local source gate, and CI runs those source checks as
 separate steps, so a green run here means those are green too. `lefthook`'s pre-commit
@@ -58,49 +63,64 @@ Development and source checks stay on Node 24. Never relax `devEngines.runtime`'
 Run the narrowest check that can fail, then the gate. Reaching for `pnpm check` on every
 edit is slow enough that it stops being run at all.
 
-| What you changed                       | The narrowest check that can fail                    |
-| -------------------------------------- | ---------------------------------------------------- |
-| A module under `src/`                  | `pnpm exec vitest run tests/<module>.test.ts`        |
-| Anything reachable from `src/index.ts` | `pnpm check`                                         |
-| A test                                 | `pnpm exec vitest run tests/<name>.test.ts`          |
-| A script under `scripts/`              | `pnpm exec vitest run tests/<script>.test.ts`        |
-| A skill under `.agents/skills/`        | `pnpm agents:sync && pnpm agents:check && pnpm test` |
-| `package.json`, `pnpm-workspace.yaml`  | `pnpm install`, then `pnpm check`                    |
-| Markdown                               | `pnpm fix`                                           |
+| What you changed                                                   | The narrowest check that can fail                    |
+| ------------------------------------------------------------------ | ---------------------------------------------------- |
+| A module under `packages/core/src/`                                | `pnpm exec vitest run --project core`                |
+| A module under `apps/web/src/` other than `main.ts`                | `pnpm exec vitest run --project web`                 |
+| `apps/web/src/main.ts`, `apps/web/index.html`, or the build output | `pnpm typecheck`, then `pnpm build`                  |
+| A test                                                             | `pnpm exec vitest run <path>`                        |
+| A script under `scripts/`                                          | `pnpm exec vitest run tests/<script>.test.ts`        |
+| A skill under `.agents/skills/`                                    | `pnpm agents:sync && pnpm agents:check && pnpm test` |
+| `package.json`, `pnpm-workspace.yaml`                              | `pnpm install`, then `pnpm check`                    |
+| Markdown                                                           | `pnpm fix`                                           |
 
 ## Architecture
 
 ```
-src/
-├── index.ts      # the public contract: the only module consumers can import
-├── cli.ts        # optional command entry; not an import surface
-├── internal/     # private; never re-exported from index.ts
-└── *.ts          # implementation modules, re-exported by name from index.ts
+packages/core/
+├── src/index.ts   # the only module apps/web imports
+└── test/          # core's unit tests
+apps/web/
+├── index.html     # the page Vite builds into apps/web/dist
+├── src/main.ts    # the browser entry
+├── vite.config.ts # base "./": every built asset URL is relative
+└── test/          # unit tests of pure helpers
+scripts/           # repository automation (.mjs), never shipped
+tests/             # repository-level tests
 ```
 
-`src/index.ts` is the single importable entry point. `src/cli.ts` is a command entry,
-not an import surface. `scripts/*.mjs` is repository automation that never ships.
+- `packages/core` holds the deterministic rules and imports nothing: no dependencies, no
+  DOM, no Node. It never imports from `apps/*`, so it runs unchanged without the
+  renderer.
+- `apps/web` is the Vite 8 game. It depends on the core package by its workspace name
+  (`workspace:*`), and reaches core only through `packages/core/src/index.ts`.
+- Anything that reads time, randomness, the device, or the network lives in `apps/web`
+  and enters core as a plain value.
+- `scripts/*.mjs` is repository automation that never ships.
+- Tests live beside the layer they cover: `packages/core/test/`, `apps/web/test/`, and
+  `tests/` for repository automation. Each layer has its own coverage floor in
+  `vitest.config.ts`; `placing-tests` explains the split.
 
 ## Skills
 
 Each skill owns one kind of change. Load the one whose subject you are working on; each
 names its own boundary with its neighbours.
 
-| Skill                        | Load it when you are working on                                                       |
-| ---------------------------- | ------------------------------------------------------------------------------------- |
-| `writing-typescript`         | a module under `src/**/*.ts`                                                          |
-| `designing-errors`           | an error type or an `ERR_*` code, in `src/` or `scripts/`                             |
-| `writing-tests`              | the body of a test under `tests/`                                                     |
-| `placing-tests`              | a new test file, a vitest project, or a coverage floor                                |
-| `writing-repo-scripts`       | a `.mjs` under `scripts/`                                                             |
-| `bootstrapping-the-template` | the bootstrap flow, its profiles, or `pnpm bootstrap:e2e`                             |
-| `authoring-skills`           | a skill under `.agents/skills/`                                                       |
-| `changing-gates`             | a CI workflow, `lefthook.yml`, or a tool config                                       |
-| `managing-dependencies`      | adding, bumping, or removing a package by hand (an open bot PR is `merge-dependabot`) |
-| `merge-dependabot`           | landing open Dependabot or Renovate pull requests                                     |
-| `updating-docs`              | `README.md`, `CONTRIBUTING.md`, or `docs/`                                            |
-| `triaging-issues`            | filing, labelling, or ranking a GitHub issue                                          |
-| `shipping-issues`            | shipping explicitly requested issues through reviewed PRs and verified merges         |
+| Skill                        | Load it when you are working on                                                           |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| `writing-typescript`         | a module under `packages/core/src/**` or `apps/web/src/**`                                |
+| `designing-errors`           | an error type or an `ERR_*` code, in `packages/core/src/`, `apps/web/src/`, or `scripts/` |
+| `writing-tests`              | the body of a test under `packages/core/test/`, `apps/web/test/`, or `tests/`             |
+| `placing-tests`              | a new test file, a vitest project, or a coverage floor                                    |
+| `writing-repo-scripts`       | a `.mjs` under `scripts/`                                                                 |
+| `bootstrapping-the-template` | the bootstrap flow, its profiles, or `pnpm bootstrap:e2e`                                 |
+| `authoring-skills`           | a skill under `.agents/skills/`                                                           |
+| `changing-gates`             | a CI workflow, `lefthook.yml`, or a tool config                                           |
+| `managing-dependencies`      | adding, bumping, or removing a package by hand (an open bot PR is `merge-dependabot`)     |
+| `merge-dependabot`           | landing open Dependabot or Renovate pull requests                                         |
+| `updating-docs`              | `README.md`, `CONTRIBUTING.md`, or `docs/`                                                |
+| `triaging-issues`            | filing, labelling, or ranking a GitHub issue                                              |
+| `shipping-issues`            | shipping explicitly requested issues through reviewed PRs and verified merges             |
 
 ## Security and human approval
 

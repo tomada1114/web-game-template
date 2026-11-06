@@ -16,8 +16,12 @@ import { createInterface } from "node:readline/promises";
 import { isMain } from "./lib/is-main.mjs";
 import { parseJson, readKey, readString } from "./lib/json.mjs";
 
-const TEMPLATE_PACKAGE = "my-package";
-const TEMPLATE_REPOSITORY = "your-name/my-package";
+// The slug names the root package, scopes the workspace packages
+// (`@my-game/core`, `@my-game/web`) and is the game's machine name in
+// apps/web/src/game-info.ts; the title is the display name shown to players.
+const TEMPLATE_PACKAGE = "my-game";
+const TEMPLATE_TITLE = "My Game";
+const TEMPLATE_REPOSITORY = "your-name/my-game";
 const TEMPLATE_AUTHOR = "Your Name";
 const TEMPLATE_EMAIL = "you@example.com";
 const TEMPLATE_DESCRIPTION = "A short description.";
@@ -29,12 +33,20 @@ const README_LICENSE_LINK = "[MIT](LICENSE)";
 // author name alone, and listing it here proves the template address is gone.
 const PLACEHOLDERS = [
   TEMPLATE_PACKAGE,
+  TEMPLATE_TITLE,
   TEMPLATE_REPOSITORY,
   TEMPLATE_AUTHOR,
   TEMPLATE_EMAIL,
   TEMPLATE_DESCRIPTION,
 ];
-const RESERVED_NAMES = new Set(["node_modules", "favicon.ico"]);
+// Both values are substituted into `export const GAME_SLUG = "<slug>";` and
+// `export const GAME_TITLE = "<title>";` in apps/web/src/game-info.ts, and the
+// HTML-escaped title into `    <title>…</title>` in apps/web/index.html. Past
+// these widths Prettier (printWidth 88) breaks the line, and the generated
+// repository fails its own first `pnpm format:check`.
+const SLUG_MAX_LENGTH = 60;
+const TITLE_MAX_COLUMNS = 59;
+const TITLE_HTML_MAX_COLUMNS = 69;
 const GENERATED_VERSION = "0.0.0";
 const GENERATED_CHANGELOG = `# Changelog
 
@@ -47,10 +59,21 @@ Release pull requests update this file as part of the reviewed release process.
 
 // Keep this list explicit. Bootstrap is a one-time rewrite of known template
 // targets, not a repository-wide search-and-replace. Add a target here when a
-// new generated file intentionally contains one of the template placeholders.
+// new generated file intentionally contains one of the template placeholders
+// — including a module that imports a workspace package by its
+// `@my-game/` name, which a generated repository renames.
+// `pnpm-lock.yaml` records each workspace dependency under its package name,
+// so a frozen install in the generated repository fails unless it is renamed
+// along with the manifests.
 const PLACEHOLDER_TARGETS = [
   { file: ".github/ISSUE_TEMPLATE/config.yml", placeholder: TEMPLATE_REPOSITORY },
   { file: "CONTRIBUTING.md", placeholder: TEMPLATE_PACKAGE },
+  { file: "packages/core/package.json", placeholder: TEMPLATE_PACKAGE },
+  { file: "apps/web/package.json", placeholder: TEMPLATE_PACKAGE },
+  { file: "apps/web/src/game-info.ts", placeholder: TEMPLATE_PACKAGE },
+  { file: "apps/web/src/game-info.ts", placeholder: TEMPLATE_TITLE },
+  { file: "apps/web/index.html", placeholder: TEMPLATE_TITLE, encode: escapeHtml },
+  { file: "pnpm-lock.yaml", placeholder: TEMPLATE_PACKAGE },
   { file: "LICENSE", placeholder: TEMPLATE_AUTHOR },
   { file: "README.md", placeholder: TEMPLATE_REPOSITORY },
   { file: "README.md", placeholder: TEMPLATE_PACKAGE },
@@ -166,9 +189,8 @@ const MARKDOWN_INLINE_CODE = /`([^`\n]+)`/g;
 const REPO_RELATIVE_PATH_TOKEN = /^[A-Za-z0-9._](?:[A-Za-z0-9._/-]*[A-Za-z0-9_/-])?$/;
 
 // Paths that a Markdown file may legitimately name without the path existing
-// in the generated tree. `dist` and `dist/cli.js` are gitignored build
-// output; `src/cli.ts` and `tests/cli.test.ts` are the sample command entry
-// and its test, which bootstrap removes;
+// in the generated tree. `dist`, `apps/web/dist` and `.tsbuild` are
+// gitignored build output;
 // `docs` itself has no hand-written page yet, so `git ls-files` — which
 // creates a directory only for a file it copies — never creates it either;
 // `.claude/settings.local.json` is gitignored personal config; `secrets`
@@ -184,10 +206,9 @@ const REPO_RELATIVE_PATH_TOKEN = /^[A-Za-z0-9._](?:[A-Za-z0-9._/-]*[A-Za-z0-9_/-
 // spellings of which only one is covered.
 const DANGLING_REFERENCE_EXEMPTIONS = new Set([
   "dist",
-  "dist/cli.js",
+  "apps/web/dist",
+  ".tsbuild",
   "docs",
-  "src/cli.ts",
-  "tests/cli.test.ts",
   ".claude/settings.local.json",
   ".claude/settings.json",
   "secrets",
@@ -206,12 +227,17 @@ function withoutTrailingSlash(token) {
 
 const USAGE = `Usage: node scripts/bootstrap.mjs
 
-With no arguments, bootstrap prompts for the package metadata.
+With no arguments, bootstrap prompts for the game's metadata.
 
 Non-interactive fallback:
-  node scripts/bootstrap.mjs <package-name> [options]
+  node scripts/bootstrap.mjs <slug> [options]
+
+<slug> is the game's machine name: lowercase letters and digits joined by
+single hyphens, at most ${String(SLUG_MAX_LENGTH)} characters. It names the root package and
+scopes the workspace packages (@<slug>/core, @<slug>/web).
 
 Required:
+  --title <name>          Display name shown to players
   --author <name>
   --github-user <owner>
   --license <MIT|ISC>
@@ -244,68 +270,109 @@ export function normalizeRelativePath(value) {
 }
 
 /**
- * Validate an npm package name without invoking npm or a shell.
+ * Validate the game slug without invoking npm or a shell.
+ *
+ * The slug is stricter than an npm package name: it also scopes the workspace
+ * packages (`@<slug>/core`), so it cannot carry a scope of its own, and it is
+ * the `GAME_SLUG` that apps/web/test/game-info.test.ts holds to a lowercase,
+ * hyphen-separated shape in the generated repository.
  *
  * @param {string} packageName
  * @returns {void}
  */
 export function validatePackageName(packageName) {
   if (packageName.length === 0) {
-    throw new BootstrapError("ERR_PACKAGE_NAME_EMPTY", "package name is required.");
+    throw new BootstrapError("ERR_PACKAGE_NAME_EMPTY", "game slug is required.");
   }
-  if (packageName.length > 214) {
+  if (packageName.length > SLUG_MAX_LENGTH) {
     throw new BootstrapError(
       "ERR_PACKAGE_NAME_LENGTH",
-      "package name must be no more than 214 characters.",
+      `game slug must be no more than ${String(SLUG_MAX_LENGTH)} characters.`,
     );
   }
   if (packageName !== packageName.toLowerCase()) {
     throw new BootstrapError(
       "ERR_PACKAGE_NAME_CASE",
-      `package name must be lowercase: ${packageName}`,
+      `game slug must be lowercase: ${packageName}`,
     );
   }
-  const match = /^(?:@([a-z0-9][a-z0-9._-]*)\/)?([a-z0-9][a-z0-9._-]*)$/.exec(
-    packageName,
-  );
-  if (match === null || packageName.includes("..")) {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(packageName)) {
     throw new BootstrapError(
       "ERR_PACKAGE_NAME_INVALID",
-      `invalid npm package name: ${packageName}`,
-    );
-  }
-  const unscoped = match[2] ?? "";
-  if (RESERVED_NAMES.has(unscoped)) {
-    throw new BootstrapError(
-      "ERR_PACKAGE_NAME_RESERVED",
-      `reserved npm package name: ${packageName}`,
+      `game slug must be letters and digits joined by single hyphens: ${packageName}`,
     );
   }
 }
 
 /**
- * Derive names used outside package.json.
+ * Count the columns Prettier gives a string, conservatively: every code point
+ * outside ASCII counts as two, the width of a CJK character or an emoji.
  *
- * @param {string} packageName
- * @returns {{unscoped: string, identifier: string, tarball: string}}
+ * @param {string} text
+ * @returns {number}
  */
-export function deriveNames(packageName) {
-  validatePackageName(packageName);
-  const [scope, unscoped] = packageName.startsWith("@")
-    ? packageName.slice(1).split("/")
-    : [undefined, packageName];
-  const safeUnscoped = unscoped;
-  let identifier = safeUnscoped.replace(/[^a-zA-Z0-9_$]+(.)?/g, (_match, next) =>
-    typeof next === "string" ? next.toUpperCase() : "",
-  );
-  if (!/^[A-Za-z_$]/.test(identifier)) {
-    identifier = `package${identifier}`;
+function displayColumns(text) {
+  let columns = 0;
+  for (const character of text) {
+    columns += (character.codePointAt(0) ?? 0) > 0x7e ? 2 : 1;
   }
-  return {
-    unscoped: safeUnscoped,
-    identifier,
-    tarball: scope === undefined ? safeUnscoped : `${scope}-${safeUnscoped}`,
-  };
+  return columns;
+}
+
+/**
+ * Validate the display title. It is written into a TypeScript string literal
+ * and an HTML `<title>`, so a character either would need escaped in a way
+ * Prettier then rewrites — a double quote flips Prettier's quote style, a
+ * backslash starts an escape — is refused rather than encoded.
+ *
+ * @param {string} title
+ * @returns {void}
+ */
+export function validateTitle(title) {
+  if (title.trim() === "" || title !== title.trim()) {
+    throw new BootstrapError(
+      "ERR_TITLE_INVALID",
+      "--title must be non-blank, with no leading or trailing whitespace.",
+    );
+  }
+  let refused = false;
+  for (const character of title) {
+    const code = character.codePointAt(0) ?? 0;
+    refused ||= character === '"' || character === "\\" || code < 0x20 || code === 0x7f;
+  }
+  if (refused) {
+    throw new BootstrapError(
+      "ERR_TITLE_INVALID",
+      "--title must not contain a double quote, a backslash, or a control character.",
+    );
+  }
+  // Prettier collapses a run of spaces in HTML text, so index.html would no
+  // longer match the title game-info.ts carries.
+  if (title.includes("  ")) {
+    throw new BootstrapError(
+      "ERR_TITLE_INVALID",
+      "--title must not contain two spaces in a row.",
+    );
+  }
+  if (
+    displayColumns(title) > TITLE_MAX_COLUMNS ||
+    displayColumns(escapeHtml(title)) > TITLE_HTML_MAX_COLUMNS
+  ) {
+    throw new BootstrapError(
+      "ERR_TITLE_LENGTH",
+      `--title must fit in ${String(TITLE_MAX_COLUMNS)} columns, and in ${String(TITLE_HTML_MAX_COLUMNS)} once HTML-escaped (a non-ASCII character counts as two).`,
+    );
+  }
+}
+
+/**
+ * Escape text for an HTML text node.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+export function escapeHtml(text) {
+  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 /**
@@ -314,6 +381,7 @@ export function deriveNames(packageName) {
  * @param {readonly string[]} argv
  * @returns {{
  *   packageName: string,
+ *   title: string,
  *   author: string,
  *   githubUser: string,
  *   license: string,
@@ -330,6 +398,7 @@ export function parseArguments(argv) {
     throw new BootstrapError("ERR_ARGUMENT_UNKNOWN", `unknown option: ${packageName}`);
   }
   const allowedFlags = new Set([
+    "--title",
     "--author",
     "--github-user",
     "--license",
@@ -368,12 +437,14 @@ export function parseArguments(argv) {
   }
 
   validatePackageName(packageName);
-  const required = ["--author", "--github-user", "--license"];
+  const required = ["--title", "--author", "--github-user", "--license"];
   for (const flag of required) {
     if ((values.get(flag) ?? "").trim() === "") {
       throw new BootstrapError("ERR_ARGUMENT_REQUIRED", `${flag} is required.`);
     }
   }
+  const title = values.get("--title") ?? "";
+  validateTitle(title);
   const license = values.get("--license") ?? "";
   if (!LICENSES.has(license)) {
     throw new BootstrapError("ERR_LICENSE_INVALID", `unsupported license: ${license}`);
@@ -388,6 +459,7 @@ export function parseArguments(argv) {
 
   return {
     packageName,
+    title,
     author: values.get("--author") ?? "",
     githubUser,
     license,
@@ -403,7 +475,8 @@ export function parseArguments(argv) {
  * @returns {Promise<ReturnType<typeof parseArguments>>}
  */
 export async function promptArguments(question) {
-  const packageName = (await question("Package name: ")).trim();
+  const packageName = (await question("Game slug: ")).trim();
+  const title = (await question("Display title: ")).trim();
   const author = (await question("Author name: ")).trim();
   const githubUser = (await question("GitHub user: ")).trim();
   const license =
@@ -414,6 +487,8 @@ export async function promptArguments(question) {
 
   const argv = [
     packageName,
+    "--title",
+    title,
     "--author",
     author,
     "--github-user",
@@ -911,7 +986,7 @@ PERFORMANCE OF THIS SOFTWARE.
 function replaceTargets(root, replacements, write, preview) {
   /** @type {Map<string, [string, string][]>} */
   const byFile = new Map();
-  for (const { file: relative, placeholder } of PLACEHOLDER_TARGETS) {
+  for (const { file: relative, placeholder, encode } of PLACEHOLDER_TARGETS) {
     // package.json is rewritten structurally below so quotes and control
     // characters in interactive metadata cannot make its JSON invalid.
     if (relative === "package.json") {
@@ -922,7 +997,10 @@ function replaceTargets(root, replacements, write, preview) {
       continue;
     }
     const fileReplacements = byFile.get(relative) ?? [];
-    fileReplacements.push([placeholder, replacement]);
+    fileReplacements.push([
+      placeholder,
+      encode === undefined ? replacement : encode(replacement),
+    ]);
     byFile.set(relative, fileReplacements);
   }
   for (const relative of MARKER_TARGETS) {
@@ -959,12 +1037,12 @@ function replaceTargets(root, replacements, write, preview) {
  * @returns {string[]}
  */
 function transform(root, options, year, preview) {
-  const names = deriveNames(options.packageName);
-  const repository = `${options.githubUser}/${names.unscoped}`;
+  const repository = `${options.githubUser}/${options.packageName}`;
   /** @type {Map<string, string>} */
   const replacements = new Map([
     [TEMPLATE_REPOSITORY, repository],
     [TEMPLATE_PACKAGE, options.packageName],
+    [TEMPLATE_TITLE, options.title],
     [TEMPLATE_AUTHOR, options.author],
     [TEMPLATE_DESCRIPTION, options.description],
     [README_LICENSE_LINK, `[${options.license}](LICENSE)`],
@@ -994,30 +1072,6 @@ function transform(root, options, year, preview) {
       preview.set(relative, null);
     }
     changed.push(`${relative} (removed)`);
-  }
-
-  // The sample command entry and its test are not part of a generated
-  // repository.
-  const cliEntry = path.join(root, "src", "cli.ts");
-  if (existsSync(cliEntry)) {
-    if (preview !== undefined) {
-      preview.set("src/cli.ts", null);
-    }
-    if (write) {
-      rmSync(cliEntry);
-    }
-    changed.push("src/cli.ts (removed)");
-  }
-
-  const cliTest = path.join(root, "tests", "cli.test.ts");
-  if (existsSync(cliTest)) {
-    if (preview !== undefined) {
-      preview.set("tests/cli.test.ts", null);
-    }
-    if (write) {
-      rmSync(cliTest);
-    }
-    changed.push("tests/cli.test.ts (removed)");
   }
 
   changed.push(...replaceTargets(root, replacements, write, preview));

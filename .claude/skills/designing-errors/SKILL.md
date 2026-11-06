@@ -1,20 +1,21 @@
 ---
 name: designing-errors
 description: >
-  Covers the shape of a package error class and the vocabulary of its `code` string, for
-  both `src/errors.ts`-style errors and `scripts/**` error codes such as
-  `ERR_BOOTSTRAP_*`. Use when adding or changing an `Error` subclass, choosing or
-  renaming an `ERR_*` code, deciding what a rejected-input error should carry, or wiring
-  an `AbortSignal` rejection reason.
+  Covers the shape of an error class and the vocabulary of its `code` string, for both
+  workspace errors in packages/core/src/ and apps/web/src/ and `scripts/**` error codes
+  such as `ERR_BOOTSTRAP_*`. Use when adding or changing an `Error` subclass, choosing
+  or renaming an `ERR_*` code, deciding what a rejected-input error should carry, or
+  wiring an `AbortSignal` rejection reason.
 ---
 
 # Designing Errors
 
-**Owns:** the shape of an error type and the vocabulary of `code` strings, in both
-`src/**` and `scripts/**`. **Does not own:** general type-system judgment
-(`writing-typescript`); how an error is asserted in a test (`writing-tests`); the stderr
-message contract for repository automation (`writing-repo-scripts` — the `ERR_` prefix
-rule below is shared with it, but the full message shape lives there).
+**Owns:** the shape of an error type and the vocabulary of `code` strings, in
+`packages/core/src/**`, `apps/web/src/**`, and `scripts/**`. **Does not own:** general
+type-system judgment (`writing-typescript`); how an error is asserted in a test
+(`writing-tests`); the stderr message contract for repository automation
+(`writing-repo-scripts` — the `ERR_` prefix rule below is shared with it, but the full
+message shape lives there).
 
 ## The one rule that matters
 
@@ -35,15 +36,13 @@ catch clause, or a script's own error handling that matches on `message` text �
   content: a length that was exceeded, a field path, an allowed set, not the string the
   caller actually passed.
 - For an argument-validation error, the field that names what was rejected is the dotted
-  path as written in the public signature (`options.maxLength`), matching
-  `InvalidInputError.field` — never an internal variable name, which can be renamed
-  without that being a contract change.
+  path as written in the public signature (`options.maxLength`) — never an internal
+  variable name, which can be renamed without that being a contract change.
 - When a function forwards an abort onto an `AbortSignal`, abort the controller with the
   exact same error instance the returned promise rejects with, not a fresh error
-  carrying the same message. `withTimeout` in `src/timeout.ts` is the model: the
-  `TimeoutError` it builds is passed to both `controller.abort(timeout)` and
-  `reject(timeout)`, so a cooperating operation reading `signal.reason` sees the
-  identical object the caller's `catch` receives.
+  carrying the same message: build the error once and pass it to both
+  `controller.abort(error)` and `reject(error)`, so a cooperating operation reading
+  `signal.reason` sees the identical object the caller's `catch` receives.
 
 ```ts
 /**

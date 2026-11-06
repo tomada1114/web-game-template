@@ -1,26 +1,27 @@
 ---
 name: writing-typescript
 description: >
-  Use when writing or reviewing a module under src/**/*.ts: narrowing unknown instead of
-  any, `satisfies` vs `as`, a type guard, interface vs type, an exhaustive switch over a
-  union, `import type` under verbatimModuleSyntax, why `enum` (erasableSyntaxOnly) and
-  `node:` imports are rejected in src/, annotating a return type or a generic boundary,
-  hitting noUncheckedIndexedAccess, exactOptionalPropertyTypes or
-  noPropertyAccessFromIndexSignature, placing a new constant, or fixing a logic bug in
-  an existing src/ function.
+  Use when writing or reviewing a module under packages/core/src/** or apps/web/src/**:
+  narrowing unknown instead of any, `satisfies` vs `as`, a type guard, interface vs
+  type, an exhaustive switch over a union, `import type` under verbatimModuleSyntax, why
+  `enum` and DOM or Node globals are rejected in packages/core, a tsc -b or
+  project-reference error, annotating a return or generic boundary, hitting
+  noUncheckedIndexedAccess or exactOptionalPropertyTypes, placing a new constant, or
+  fixing a logic bug in an existing workspace function.
 ---
 
 # Writing TypeScript
 
-**Owns:** type-system judgment, naming, and constant placement inside a `src/**/*.ts`
-module. **Does not own:** the shape of an error class (`designing-errors`); what may be
-exported from `src/index.ts` (`writing-game-core` § API and state); the `.mjs` files
-under `scripts/` (`writing-repo-scripts`).
+**Owns:** type-system judgment, naming, and constant placement inside a
+`packages/core/src/**` or `apps/web/src/**` module, and the compiler settings of each
+workspace program. **Does not own:** the shape of an error class (`designing-errors`);
+what may be exported from `packages/core/src/index.ts` (`writing-game-core` § API and
+state); the `.mjs` files under `scripts/` (`writing-repo-scripts`).
 
 ## Naming and constants
 
 - An error `code` string is not a naming decision made here — **REQUIRED:**
-  `designing-errors` owns the `ERR_*` vocabulary for both `src/` and `scripts/`.
+  `designing-errors` owns the `ERR_*` vocabulary for workspace source and `scripts/`.
 - Keep a constant next to the code that uses it. Do not create a shared `constants.ts`
   grab-bag that forces unrelated modules to import each other.
 
@@ -58,10 +59,9 @@ under `scripts/` (`writing-repo-scripts`).
   `noUncheckedIndexedAccess` is on. Treat the `undefined` branch as real rather than
   asserting it away.
 - `exactOptionalPropertyTypes` makes an absent property and an explicit `undefined`
-  distinct types. A public `XOptions` interface declares its properties `readonly` and
-  `?:` (mirroring `NormalizeIdentifierOptions` and `WithTimeoutOptions`); an internal
-  argument whose omission would be a bug takes a required `T | undefined` instead, so a
-  caller cannot drop it by accident.
+  distinct types. An exported `XOptions` interface declares its properties `readonly`
+  and `?:`; an internal argument whose omission would be a bug takes a required
+  `T | undefined` instead, so a caller cannot drop it by accident.
 - `noPropertyAccessFromIndexSignature` forbids dot access on an index signature, while
   typed-lint's `dot-notation` pushes the other way for a literal key. A literal
   `as const` object escapes the conflict because its keys are literal, not an index
@@ -72,13 +72,14 @@ under `scripts/` (`writing-repo-scripts`).
 
 ## Function boundaries and generics
 
-- Annotate the return type of every non-generic export from `src/index.ts`.
+- Annotate the return type of every non-generic export from
+  `packages/core/src/index.ts`.
 - On a generic export, annotate the return type only if the annotation is provably no
   wider than what inference would produce — a hand-written annotation is the standard
   way to accidentally widen a generic that should stay preserved.
 - Keep exported generics narrow: accept the widest reasonable input, return the
-  narrowest true output. `withTimeout` is the worked example — it returns the
-  operation's own resolved type instead of widening it to something looser.
+  narrowest true output — a function wrapping an operation returns that operation's own
+  resolved type instead of widening it to something looser.
 - Let inference do the work inside a function body; reserve explicit annotations for
   boundaries (parameters, exported return types), not every local binding.
 
@@ -94,9 +95,38 @@ under `scripts/` (`writing-repo-scripts`).
   to a new union member, not a placeholder — adding one to silence the rule is what
   disables the protection it exists to give.
 
-## Runtime-agnostic source
+## One program per runtime
 
-- `node:*` imports are allowed in `src/**`: `tsconfig.build.json`'s
-  `compilerOptions.types` is `["node"]`. The build config's explicit `lib` list also
-  keeps browser-only globals out of Node builds; `pnpm typecheck` checks both the
-  repository and source build configs.
+`pnpm typecheck` is `tsc -b` on the root `tsconfig.json`, which references one program
+per layer. Each extends `tsconfig.base.json` for the shared strictness and states only
+what its runtime differs in:
+
+| Program                            | Runtime                             | Module resolution                                                  |
+| ---------------------------------- | ----------------------------------- | ------------------------------------------------------------------ |
+| `packages/core/tsconfig.json`      | `lib: ["ES2023"]`, no `types`       | `NodeNext`, `.js` suffix on relative imports                       |
+| `apps/web/tsconfig.json`           | `ES2023` + `DOM`, `vite/client`     | `Bundler`                                                          |
+| `packages/core/test/tsconfig.json` | `ES2023`, Node (via Vitest)         | `NodeNext`                                                         |
+| `apps/web/test/tsconfig.json`      | `ES2023` + `DOM`, Node (via Vitest) | `Bundler`                                                          |
+| `tsconfig.json` (root)             | Node                                | `NodeNext`; scripts, tests, configs, and `apps/web/vite.config.ts` |
+
+- Core sees neither DOM nor Node: `types: []` keeps `@types/node` out, and the `lib`
+  list keeps `document` out, so either global fails `pnpm typecheck` with "Cannot find
+  name". `eslint.config.mjs` rejects the same globals and every `node:` import in
+  `packages/core/src/**`, naming the boundary in its message. Read a value from the
+  platform in `apps/web` and pass it in instead.
+- Core's tests are a program of their own because importing `vitest` pulls Node's types
+  in through Vite's declarations. Sharing core's program, that would let a `process`
+  reference type-check in core's source.
+- Core keeps `NodeNext`, which requires an explicit extension on every relative import
+  (`rules-version.js` to import `rules-version.ts`), so core never leans on a resolution
+  only a bundler performs. Vite resolves the `.js` suffix to the `.ts` file for an
+  importer. `apps/web` uses `Bundler`, because Vite, not Node, resolves its imports.
+- `apps/web` imports core by its package name, whose `exports` map points at
+  `packages/core/src/index.ts`; Vite bundles that source directly, so core has no build
+  step of its own.
+- A program another program references must emit, so each referenced program is
+  `composite` with `emitDeclarationOnly`, writing declarations and its build info under
+  the gitignored `.tsbuild/` — never `dist/`, which is the game's build output. Nothing
+  reads `.tsbuild/` except `tsc -b` itself; `pnpm clean` removes it.
+- A Vite config runs in Node, so `apps/web/vite.config.ts` is checked by the root
+  program, not by the browser-only `apps/web/tsconfig.json`.

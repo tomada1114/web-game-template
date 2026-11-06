@@ -1,0 +1,16 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "outDir": "../../../.tsbuild/web-test",
+    "tsBuildInfoFile": "../../../.tsbuild/web-test.tsbuildinfo",
+    "rootDir": ".",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["."],
+  "references": [{ "path": ".." }]
+}

@@ -7,9 +7,8 @@ const fixtures = "tests/fixtures/**";
 // Tests that import repository automation, touch the filesystem, spawn a
 // subprocess, or use git. They are listed explicitly so a new test defaults to
 // the short-timeout unit project until its I/O needs are deliberately reviewed.
-// The four files not listed here are pure unit tests; guard-rules.test.ts is the
-// intentional exception to the usual `src/**` rule because it calls the guard
-// engine's pure functions directly.
+// The files not listed here are pure unit tests; guard-rules.test.ts calls the
+// guard engine's pure functions directly, so it needs no I/O budget either.
 const automationTests = [
   "tests/bootstrap.test.ts",
   "tests/check-staged.test.ts",
@@ -42,14 +41,35 @@ export default defineConfig({
     // everywhere — not only under CI, which is the default — means the author
     // finds it before the commit rather than the pipeline finding it after.
     allowOnly: false,
-    // Two projects, split by what a test actually touches rather than by
-    // where it lives: a new test is unit by default, while the explicit
-    // automation list receives the long budget only after its I/O needs are
-    // known. A hung unit test (no I/O, so it can only be looping or awaiting
-    // forever) is a bug that should be visible in seconds. `coverage` below is
-    // unaffected by this split — Vitest collects and thresholds coverage once
-    // for the whole run, never per project.
+    // One project per workspace package, so `--project core` or
+    // `--project web` runs exactly that package's tests with no per-package
+    // test script. Repository-level tests split further by what a test
+    // actually touches rather than by where it lives: a new test is unit by
+    // default, while the explicit automation list receives the long budget
+    // only after its I/O needs are known. A hung unit test (no I/O, so it can
+    // only be looping or awaiting forever) is a bug that should be visible in
+    // seconds. `coverage` below is unaffected by these projects — Vitest
+    // collects and thresholds coverage once for the whole run, never per
+    // project.
     projects: [
+      {
+        extends: true,
+        test: {
+          name: "core",
+          include: ["packages/core/test/**/*.test.ts"],
+          testTimeout: 5_000,
+          hookTimeout: 5_000,
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "web",
+          include: ["apps/web/test/**/*.test.ts"],
+          testTimeout: 5_000,
+          hookTimeout: 5_000,
+        },
+      },
       {
         extends: true,
         test: {
@@ -79,16 +99,26 @@ export default defineConfig({
       reporter: ["text", "lcov"],
       // Report every source and automation file, so an untested module shows
       // up as 0% instead of vanishing from the denominator.
-      include: ["src/**/*.ts", "scripts/**/*.mjs"],
+      include: ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "scripts/**/*.mjs"],
+      // The web entry and its scenes only run inside a real browser, which the
+      // boot smoke test drives; a Vitest worker cannot reach them, so a floor
+      // on them would measure nothing.
+      exclude: ["apps/web/src/main.ts", "apps/web/src/scenes/**"],
       // No top-level lines/functions/statements/branches here: Vitest's v8
       // provider checks those against the coverage of *all* included files
-      // combined (src and scripts together), which would let a well-tested
-      // src/ subsidize an untested scripts/ file or vice versa. Each glob
-      // below is its own independent threshold set instead, so src/**,
-      // scripts/**, and scripts/lib/guard/** are each judged only against
-      // their own coverage.
+      // combined, which would let a well-tested layer subsidize an untested
+      // one. Each glob below is its own independent threshold set instead, so
+      // each layer is judged only against its own coverage.
       thresholds: {
-        "src/**/*.ts": {
+        // The deterministic rules: every result a player can record depends
+        // on them, so they carry the highest floor.
+        "packages/core/src/**": {
+          lines: 95,
+          functions: 95,
+          statements: 95,
+          branches: 95,
+        },
+        "apps/web/src/**": {
           lines: 80,
           functions: 80,
           statements: 80,

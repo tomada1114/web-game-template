@@ -15,8 +15,8 @@ description: >
 **Owns:** the authoring contract for `scripts/**/*.mjs` — imports, typing, git safety,
 and the stderr contract. **Does not own:** authoring a skill or mirroring it into
 `.claude/skills/` (`authoring-skills`); where a script's tests live and its coverage
-floor (`placing-tests`); the `ERR_<STAGE>_*` code vocabulary shared with `src/`
-(`designing-errors`).
+floor (`placing-tests`); the `ERR_<STAGE>_*` code vocabulary shared with the workspace
+packages (`designing-errors`).
 
 ## Why `.mjs`, not `.ts`
 
@@ -38,7 +38,7 @@ automation/node-scripts block in `eslint.config.mjs`.
 
 - These files are type-checked exactly like a `.ts` module. Declare boundary types in
   JSDoc (`@param`, `@returns`, `@typedef`) with the same rigor as a TypeScript signature
-  — an untyped parameter here is as much a gap as one in `src/`.
+  — an untyped parameter here is as much a gap as one in a `.ts` module.
 - Receive `JSON.parse` output as `unknown` and narrow it through `readKey`/`readString`
   in `scripts/lib/json.mjs`, never a direct cast. `noPropertyAccessFromIndexSignature`
   and the typed-lint `dot-notation` rule disagree about literal-key access on a
@@ -109,4 +109,4 @@ Next: run `pnpm install --frozen-lockfile`.
 A new script is covered by the `scripts/**` coverage floor from the moment it exists —
 an untested file counts as 0%, not as absent from the measurement. **BACKGROUND:**
 `placing-tests` explains why `scripts/**` and `scripts/lib/guard/**` carry their own
-floors instead of `src/**`'s.
+floors instead of a workspace package's.

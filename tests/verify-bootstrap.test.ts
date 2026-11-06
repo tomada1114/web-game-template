@@ -194,19 +194,35 @@ describe("listRoutingTableSkillNames", () => {
 });
 
 describe("assertGenerated", () => {
+  const TITLE = "Acme & Co";
+
   /**
    * A minimal fixture tree that satisfies every check `assertGenerated`
    * makes: the four marker targets (with no residual marker text), a
-   * changelog with no version heading, and a manifest naming `packageName`
-   * at version 0.0.0 with no bin and sideEffects: false. `manifestOverrides`
-   * is merged onto that base manifest so a test can deviate a single field
-   * without duplicating the whole shape.
+   * changelog with no version heading, a manifest naming `packageName`
+   * at version 0.0.0 with no bin and sideEffects: false, and the workspace
+   * files that carry the slug and the title. `manifestOverrides` is merged
+   * onto that base manifest so a test can deviate a single field without
+   * duplicating the whole shape.
    */
   function writeValidFixture(
     destination: string,
     packageName: string,
     manifestOverrides: Record<string, unknown> = {},
   ): void {
+    const workspaceFiles: Record<string, string> = {
+      "packages/core/package.json": `{ "name": "@acme-game/core" }\n`,
+      "apps/web/package.json": `{ "name": "@acme-game/web" }\n`,
+      "apps/web/src/game-info.ts":
+        'export const GAME_SLUG = "acme-game";\nexport const GAME_TITLE = "Acme & Co";\n',
+      "apps/web/index.html": "<title>Acme &amp; Co</title>\n",
+      "pnpm-lock.yaml": "  apps/web:\n    dependencies:\n      '@acme-game/core':\n",
+    };
+    for (const [relative, contents] of Object.entries(workspaceFiles)) {
+      const target = path.join(destination, relative);
+      mkdirSync(path.dirname(target), { recursive: true });
+      writeFileSync(target, contents);
+    }
     for (const relative of [
       "AGENTS.md",
       "README.md",
@@ -240,17 +256,17 @@ describe("assertGenerated", () => {
     const destination = makeDestination();
     writeValidFixture(destination, "acme-game");
 
-    expect(() => assertGenerated(destination, "acme-game")).not.toThrow();
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).not.toThrow();
   });
 
   it("throws ERR_PLACEHOLDER_REMAINING when a placeholder target still holds a placeholder", () => {
     const destination = makeDestination();
     writeValidFixture(destination, "acme-game");
-    // README.md is both a marker target and a placeholder target; "my-package"
+    // README.md is both a marker target and a placeholder target; "my-game"
     // mirrors bootstrap.mjs's own TEMPLATE_PACKAGE constant.
-    writeFileSync(path.join(destination, "README.md"), "# my-package\n");
+    writeFileSync(path.join(destination, "README.md"), "# my-game\n");
 
-    expect(() => assertGenerated(destination, "acme-game")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
       /ERR_PLACEHOLDER_REMAINING/,
     );
   });
@@ -263,7 +279,7 @@ describe("assertGenerated", () => {
       "# template-only block\n",
     );
 
-    expect(() => assertGenerated(destination, "acme-game")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
       /ERR_BOOTSTRAP_MARKER/,
     );
   });
@@ -273,7 +289,7 @@ describe("assertGenerated", () => {
     writeValidFixture(destination, "acme-game");
     mkdirSync(path.join(destination, ".changeset"), { recursive: true });
 
-    expect(() => assertGenerated(destination, "acme-game")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
       /ERR_RELEASE_INTENT_PATH_REMAINING/,
     );
   });
@@ -284,7 +300,7 @@ describe("assertGenerated", () => {
     mkdirSync(path.join(destination, "scripts"), { recursive: true });
     writeFileSync(path.join(destination, "scripts", "bootstrap.mjs"), "export {};\n");
 
-    expect(() => assertGenerated(destination, "acme-game")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
       /ERR_BOOTSTRAP_SCRIPT_REMAINING/,
     );
   });
@@ -303,7 +319,7 @@ describe("assertGenerated", () => {
       recursive: true,
     });
 
-    expect(() => assertGenerated(destination, "acme-game")).not.toThrow();
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).not.toThrow();
   });
 
   it("throws ERR_BOOTSTRAP_STALE_SKILL_ROUTE when a routed skill has no directory", () => {
@@ -319,7 +335,7 @@ describe("assertGenerated", () => {
         "| `bootstrapping-the-template` | the bootstrap flow |\n",
     );
 
-    expect(() => assertGenerated(destination, "acme-game")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
       /ERR_BOOTSTRAP_STALE_SKILL_ROUTE/,
     );
   });
@@ -332,7 +348,7 @@ describe("assertGenerated", () => {
       "# Changelog\n\n## 1.0.0 - 2024-01-01\n",
     );
 
-    expect(() => assertGenerated(destination, "acme-game")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
       /ERR_CHANGELOG_ENTRY_REMAINING/,
     );
   });
@@ -342,7 +358,7 @@ describe("assertGenerated", () => {
     writeValidFixture(destination, "acme-game");
     writeFileSync(path.join(destination, "package.json"), "null\n");
 
-    expect(() => assertGenerated(destination, "acme-game")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
       /ERR_MANIFEST_SHAPE/,
     );
   });
@@ -351,14 +367,16 @@ describe("assertGenerated", () => {
     const destination = makeDestination();
     writeValidFixture(destination, "some-other-name");
 
-    expect(() => assertGenerated(destination, "acme-game")).toThrow(/ERR_PACKAGE_NAME/);
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
+      /ERR_PACKAGE_NAME/,
+    );
   });
 
   it("throws ERR_VERSION_REMAINING when package.json#version is not 0.0.0", () => {
     const destination = makeDestination();
     writeValidFixture(destination, "acme-game", { version: "1.0.0" });
 
-    expect(() => assertGenerated(destination, "acme-game")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
       /ERR_VERSION_REMAINING/,
     );
   });
@@ -367,16 +385,50 @@ describe("assertGenerated", () => {
     const destination = makeDestination();
     writeValidFixture(destination, "acme-game", { bin: "./dist/cli.js" });
 
-    expect(() => assertGenerated(destination, "acme-game")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
       /ERR_BIN_REMAINING/,
     );
   });
+
+  it.each(["packages/core/package.json", "apps/web/package.json"])(
+    "throws ERR_WORKSPACE_NAME when %s keeps the template scope",
+    (relative) => {
+      const destination = makeDestination();
+      writeValidFixture(destination, "acme-game");
+      writeFileSync(path.join(destination, relative), `{ "name": "@other/core" }\n`);
+
+      expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
+        /ERR_WORKSPACE_NAME/,
+      );
+    },
+  );
+
+  it.each([
+    ["apps/web/src/game-info.ts", 'export const GAME_SLUG = "acme-game";\n'],
+    [
+      "apps/web/src/game-info.ts",
+      'export const GAME_SLUG = "other";\nexport const GAME_TITLE = "Acme & Co";\n',
+    ],
+    ["apps/web/index.html", "<title>Acme & Co</title>\n"],
+    ["pnpm-lock.yaml", "  apps/web:\n    dependencies:\n      '@other/core':\n"],
+  ])(
+    "throws ERR_GAME_RENAME_MISSING when %s does not carry the new name",
+    (relative, contents) => {
+      const destination = makeDestination();
+      writeValidFixture(destination, "acme-game");
+      writeFileSync(path.join(destination, relative), contents);
+
+      expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
+        /ERR_GAME_RENAME_MISSING/,
+      );
+    },
+  );
 
   it("throws ERR_SIDE_EFFECTS_REMAINING when package.json#sideEffects is not false", () => {
     const destination = makeDestination();
     writeValidFixture(destination, "acme-game", { sideEffects: undefined });
 
-    expect(() => assertGenerated(destination, "acme-game")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
       /ERR_SIDE_EFFECTS_REMAINING/,
     );
   });

@@ -1,5 +1,7 @@
 # Build output and caches
 dist/
+.tsbuild/
+.package/
 coverage/
 node_modules/
 

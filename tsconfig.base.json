@@ -1,0 +1,32 @@
+{
+  // The strictness every TypeScript program in the workspace shares. Each
+  // tsconfig.json extends this and adds only what its own layer differs in:
+  // its runtime (`lib`, `types`), its module resolution, and its files.
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUncheckedSideEffectImports": true,
+    "noImplicitReturns": true,
+    "useUnknownInCatchVariables": true,
+    // Forbids the syntax Node's type stripping cannot erase — enum, namespace,
+    // parameter properties — so every source file stays runnable unbuilt.
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "forceConsistentCasingInFileNames": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "skipLibCheck": true,
+    // Closes the path where a package in node_modules substitutes its own
+    // standard library for TypeScript's built-in lib files.
+    "libReplacement": false,
+    "noEmit": true
+  }
+}

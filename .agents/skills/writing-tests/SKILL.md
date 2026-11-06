@@ -1,12 +1,12 @@
 ---
 name: writing-tests
 description: >
-  Use when writing or reviewing a test in tests/*.test.ts, or adding the regression test
-  a src/ bug fix needs: deciding what a new it() should assert, naming it after
-  behavior, asserting an error's class and `code` instead of its message, sweeping edge
-  cases with it.each, choosing a fake over a mock, replacing a real sleep with
-  vi.useFakeTimers, isolating a filesystem test in mkdtempSync, fixing a flaky or
-  skipped test, or writing the missing test a coverage floor is asking for.
+  Use when writing or reviewing a test in packages/core/test/, apps/web/test/ or tests/,
+  or adding the regression test a bug fix needs: deciding what a new it() should assert,
+  naming it after behavior, asserting an error's class and `code` instead of its
+  message, sweeping edge cases with it.each, choosing a fake over a mock, replacing a
+  real sleep with vi.useFakeTimers, isolating a filesystem test in mkdtempSync, fixing a
+  flaky or skipped test, or writing the missing test a coverage floor is asking for.
 ---
 
 # Writing Tests
@@ -22,10 +22,10 @@ error classes a test asserts against (`designing-errors`).
   `it("rejects a fractional timeout", ...)`, not `it("calls validate")`.
 - One behavior per `it`. Branching inside a test body belongs in a separate `it` or an
   `it.each` table, never an `if` in the test.
-- Test public behavior through `src/index.ts`'s exports, never through
-  `src/internal/**`. The interface is the test surface: if you find yourself wanting to
-  reach past a module's exports to assert something, the module is the wrong shape, not
-  the test.
+- Test public behavior through a module's exports — core's through what
+  `packages/core/src/index.ts` re-exports — never through a module's private helpers.
+  The interface is the test surface: if you find yourself wanting to reach past a
+  module's exports to assert something, the module is the wrong shape, not the test.
 - Cover the happy path and the error path of every public function.
 
 ## Asserting errors
@@ -45,12 +45,12 @@ the failure path too, not only on success.
 ## CLI behavior
 
 The observable contract of a command is `argv` → exit code, stdout, and stderr. Drive
-that contract through the CLI entry, such as `src/cli.ts`'s exported runner, and assert
-the complete result for representative arguments. Do not reach into `src/internal/` to
-make command logic testable; if direct unit access is required, the export-surface
-decision (`writing-game-core` § API and state) makes that logic public instead. A
-child-process test may exercise the installed command path when the executable boundary
-itself matters, but it should still assert only those caller-visible streams and status.
+that contract through the script's exported entry, such as `clean()` in
+`scripts/clean.mjs`, and assert the complete result for representative arguments. If a
+piece of command logic needs direct unit access, export it from the script rather than
+reaching around its entry. A child-process test may exercise the real command when the
+executable boundary itself matters, but it should still assert only those caller-visible
+streams and status.
 
 ## Expected values come from outside the code
 
@@ -76,8 +76,8 @@ placeholders in the title rather than a bare index.
 - Prefer factory functions (`function makeX(overrides = {})`) to shared mutable
   fixtures.
 - `tests/fixtures/` is reserved for data under test, including deliberately malformed
-  inputs that must remain byte-for-byte invalid. Keep the test under `tests/*.test.ts`;
-  fixture files are never imported as modules.
+  inputs that must remain byte-for-byte invalid. Keep the test itself in a `*.test.ts`
+  file; fixture files are never imported as modules.
 - Filesystem tests use a fresh `mkdtempSync(path.join(tmpdir(), "prefix-"))` removed in
   `afterEach` with `rmSync(dir, { recursive: true, force: true })` — never write into a
   real project directory.
@@ -113,7 +113,7 @@ across it.
 No real `setTimeout` or sleep: `vi.useFakeTimers()` plus
 `await vi.advanceTimersByTimeAsync(ms)`, restored with `vi.useRealTimers()`. An
 abortable API is tested for the caller-visible effect of the abort and for the timer and
-listener it removes, on both outcomes — `tests/timeout.test.ts` is the model.
+listener it removes, on both outcomes.
 
 ## Anti-patterns
 
@@ -126,6 +126,6 @@ listener it removes, on both outcomes — `tests/timeout.test.ts` is the model.
 
 `fast-check` is worth reaching for when a function has a well-defined invariant over a
 large input space — a round trip, an idempotent normalization, an ordering guarantee —
-not as a default for ordinary tests. It is not a dependency of this package today, and
-adding it goes through the same review as any other dependency. **REQUIRED:**
+not as a default for ordinary tests. It is not a dependency of this repository today,
+and adding it goes through the same review as any other dependency. **REQUIRED:**
 `managing-dependencies`.

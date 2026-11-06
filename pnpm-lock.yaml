@@ -241,6 +241,18 @@ importers:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@24.19.0)(@vitest/coverage-v8@4.1.11)(vite@8.1.5(@types/node@24.19.0)(yaml@2.9.0))
 
+  apps/web:
+    dependencies:
+      '@my-game/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+    devDependencies:
+      vite:
+        specifier: ^8.1.5
+        version: 8.1.5(@types/node@24.19.0)(yaml@2.9.0)
+
+  packages/core: {}
+
 packages:
 
   '@babel/helper-string-parser@7.29.7':
