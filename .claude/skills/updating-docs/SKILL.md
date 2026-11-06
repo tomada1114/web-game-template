@@ -2,10 +2,10 @@
 name: updating-docs
 description: >
   Decides whether a change needs a documentation update and which surface it lands on —
-  README.md, docs/**, TSDoc in src/**, or CHANGELOG.md — for edits touching
-  src/index.ts, README.md, CONTRIBUTING.md, or docs/**. Use when triaging whether a PR
-  needs a doc change, updating the README example after an API change, or deciding if an
-  internal refactor needs no docs at all.
+  README.md, docs/**, TSDoc in packages/core/src/** or apps/web/src/**, or CHANGELOG.md
+  — for edits touching packages/core/src/index.ts, README.md, CONTRIBUTING.md, or
+  docs/**. Use when triaging whether a PR needs a doc change, updating the README
+  example after an API change, or deciding if an internal refactor needs no docs at all.
 ---
 
 # Updating Documentation
@@ -33,7 +33,8 @@ first one that seems relevant:
 
 - The README example, if the change affects what it shows.
 - The affected pages under `docs/**`.
-- TSDoc comments in `src/**` for the symbol that changed.
+- TSDoc comments in `packages/core/src/**` or `apps/web/src/**` for the symbol that
+  changed.
 - CHANGELOG.md, when the change implies a release. **REQUIRED:** follow
   `releasing-builds` for the release line and the entry itself; this skill only flags
   that one is owed.
@@ -56,11 +57,12 @@ Each file has one job; do not blur them:
 
 Document non-obvious behavior, architecture decisions, and trade-offs. Do not restate
 what the code or the type system already says — the same principle TSDoc follows in
-`src/**`. If a reader could get the fact from the signature or from running the code, it
-does not need a sentence here.
+workspace source. If a reader could get the fact from the signature or from running the
+code, it does not need a sentence here.
 
 ## Code examples must compile
 
 No test compiles the fenced `ts` examples in README.md or the `@example` blocks in
-`src/**`, so nothing catches a stale snippet. A change to `src/index.ts` that breaks a
-documented snippet updates that snippet in the same commit as the signature change.
+workspace source, so nothing catches a stale snippet. A change to
+`packages/core/src/index.ts` that breaks a documented snippet updates that snippet in
+the same commit as the signature change.

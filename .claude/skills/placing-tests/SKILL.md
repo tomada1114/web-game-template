@@ -1,10 +1,11 @@
 ---
 name: placing-tests
 description: >
-  Decides where a new test file goes under tests/<module>.test.ts, which
-  vitest.config.ts project (unit vs automation) it joins, and which of the three
-  coverage.thresholds floors (src/**, scripts/**, scripts/lib/guard/**) govern it. Use
-  when adding a *.test.ts file, choosing between `pnpm exec vitest run` and `pnpm
+  Decides where a new test file goes — packages/core/test/, apps/web/test/, or tests/ —
+  which vitest.config.ts project (core, web, unit, automation) it joins, and which
+  coverage.thresholds floor (packages/core/src/**, apps/web/src/**, scripts/**,
+  scripts/lib/guard/**) governs it. Use when adding a *.test.ts file, running one
+  project with --project, choosing between `pnpm exec vitest run` and `pnpm
   test:coverage`, or a coverage run drops below a floor.
 ---
 
@@ -16,10 +17,18 @@ style, and fixtures (`writing-tests`).
 
 ## Location
 
-- Every test file lives at `tests/<module>.test.ts`. Never co-locate a test next to the
-  source file it covers.
+A test lives beside the layer it covers, never next to the source file it covers:
+
+- `packages/core/test/` — core's tests, importing core through `../src/index.js`.
+- `apps/web/test/` — tests of `apps/web`'s pure helpers. The web entry and its scenes
+  run only in a real browser, which the boot smoke test drives, not Vitest.
+- `tests/` — repository automation, the tool configs, and the workflows; the boot smoke
+  test will live in an e2e directory beside them.
+
+Name the file after the module it covers, `<module>.test.ts`.
+
 - `tests/fixtures/` is reserved for data under test, not test modules. Keep executable
-  assertions in `tests/<module>.test.ts`.
+  assertions in a `*.test.ts` file.
 - Nothing under `tests/fixtures/` is linted, formatted, type-checked, spell-checked, or
   collected as a test — `eslint.config.mjs`, `.prettierignore`, `tsconfig.json`,
   `typos.toml` and `vitest.config.ts` all skip it, and `tests/tooling-ignores.test.ts`
@@ -29,16 +38,24 @@ style, and fixtures (`writing-tests`).
 
 ## Choosing a project
 
-`vitest.config.ts` splits `test.projects` into `unit` and `automation`. Placement is a
-decision you make from what the file touches, never from its name or its directory. The
-unit project includes `tests/**/*.test.ts` by default; the automation project is the
-explicit `automationTests` list at the top of `vitest.config.ts`. A new test therefore
-starts in `unit`, and you add its path to `automationTests` when it needs I/O. Choose
-between them by:
+`vitest.config.ts` defines four `test.projects`. Two follow from where the file lives:
 
-- **`unit`** — the test imports only `src/**` (plus, as a deliberate exception,
-  `scripts/lib/guard/**`'s own pure-function tests) and touches no filesystem,
-  subprocess, or git.
+- **`core`** — every `*.test.ts` under `packages/core/test/`.
+- **`web`** — every `*.test.ts` under `apps/web/test/`.
+
+Run one with `pnpm exec vitest run --project core` (or `web`); there are no per-package
+test scripts. Both carry the short unit budget: a workspace test touches no filesystem,
+subprocess, or git.
+
+A file under `tests/` joins `unit` or `automation`, and that placement is a decision you
+make from what the file touches, never from its name. The unit project includes
+`tests/**/*.test.ts` by default; the automation project is the explicit
+`automationTests` list at the top of `vitest.config.ts`. A new test therefore starts in
+`unit`, and you add its path to `automationTests` when it needs I/O. Choose between them
+by:
+
+- **`unit`** — the test calls only pure functions (the guard engine's own tests are the
+  example) and touches no filesystem, subprocess, or git.
 - **`automation`** — everything else: any test that shells out, reads or writes a temp
   directory, or spawns `git`/`node`.
 
@@ -56,27 +73,20 @@ work.
   a real subprocess or temp-directory operation — giving it the short one would make
   correct tests flaky.
 
-## CLI entry tests
-
-A command's test seam is the CLI entry itself: drive `argv` and observe the exit code,
-stdout, and stderr. For `src/cli.ts`, the conventional location is `tests/cli.test.ts`,
-not `src/internal/` and not a second public package entry. An in-process entry test that
-imports only `src/cli.ts` and touches no I/O belongs to the `unit` project; a test that
-starts the command as a child process or uses a temporary consumer belongs to
-`automation`.
-
 ## Coverage floors
 
-`coverage.include` in `vitest.config.ts` lists both `src/**/*.ts` and `scripts/**/*.mjs`
-on purpose: a file with no test still counts toward the denominator at 0% instead of
-vanishing from it. A new file is covered from the moment it exists — write its test in
-the same PR, not as follow-up.
+`coverage.include` in `vitest.config.ts` lists the workspace packages' source and
+`scripts/**/*.mjs` on purpose: a file with no test still counts toward the denominator
+at 0% instead of vanishing from it. A new file is covered from the moment it exists —
+write its test in the same PR, not as follow-up. The one exclusion is the web entry and
+its scenes, which only the boot smoke test can reach.
 
-Three independent threshold sets exist, not one, because they answer three different
-questions:
+Each layer has an independent threshold set, not one shared number, because each answers
+a different question:
 
-- **`src/**`** carries the package's own baseline floor — this is the public contract's
-  coverage bar.
+- **`packages/core/src/**`** — the deterministic rules every recorded result depends on
+  — carries the highest floor.
+- **`apps/web/src/**`** carries the baseline floor for the web shell's own helpers.
 - **`scripts/**`** was never measured before it was added to `coverage.include`, so its
   floor is the last measured coverage rounded down to a clean value, not a guessed
   target — it has been raised as coverage grew (see the dated comments in
@@ -94,24 +104,25 @@ deliberately does not repeat them, since a copied number goes stale the moment t
 config changes.
 
 **Coverage stops at the process boundary.** The v8 provider instruments the Vitest
-workers and nothing else, so a `src/**` module that only ever executes inside a process
-the test spawns reports 0% however thoroughly the integration test exercises it — and 0%
-against an 80% floor fails the run. Design for it rather than discovering it: keep the
-part that runs in the child thin and put the logic behind it in a module the test can
-also call in-process.
+workers and nothing else, so a module that only ever executes inside a process the test
+spawns reports 0% however thoroughly the integration test exercises it — and 0% against
+an 80% floor fails the run. Design for it rather than discovering it: keep the part that
+runs in the child thin and put the logic behind it in a module the test can also call
+in-process.
 
 - **Branch coverage is the one that matters.** Cover both sides of a conditional rather
   than adding a trivial test whose only effect is moving a line/statement percentage.
 - **A floor is never lowered, and no file is added to `coverage.exclude` to move a
   number** — AGENTS.md's "Security and human approval" holds that prohibition for every
   agent, including one whose task is only "make CI green." What this skill owns is which
-  of the three floors applies and why.
+  floor applies and why.
 
 ## Commands
 
 ```bash
-pnpm exec vitest run tests/<name>.test.ts   # one file, fast iteration
-pnpm test:coverage                          # full suite with floors enforced
+pnpm exec vitest run --project core         # one project (or web, unit, automation)
+pnpm exec vitest run <path>                  # one file, fast iteration
+pnpm test:coverage                           # full suite with floors enforced
 ```
 
 If `pnpm test:coverage` fails on a floor, add real coverage for the uncovered branch —
