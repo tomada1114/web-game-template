@@ -109,18 +109,65 @@ describe("the .claude/skills ignore entry in eslint.config.mjs", () => {
   });
 });
 
-describe("the CLI-only no-console boundary in eslint.config.mjs", () => {
-  it.each([
-    ["the CLI entry", "src/cli.ts", 0],
-    ["a nested CLI module", "src/cli/commands.ts", 0],
-    ["the public library entry", "src/index.ts", 2],
-    ["a private library module", "src/internal/assert.ts", 2],
-  ])("sets no-console to %s for %s", async (_label, relative, expected) => {
+describe("the platform-only console boundary in eslint.config.mjs", () => {
+  async function noConsole(relative: string): Promise<RuleSetting | undefined> {
     const config = (await eslint.calculateConfigForFile(
       path.join(repoRoot, relative),
     )) as EffectiveConfig;
-    const setting = config.rules?.["no-console"];
-    expect(ruleSeverity(setting)).toBe(expected);
+    return config.rules?.["no-console"];
+  }
+
+  // Both settings are severity 2, so the `allow` option is what tells the
+  // platform adapter apart from everything else.
+  it.each([
+    ["the platform adapter", "apps/web/src/platform/crazygames.ts"],
+    ["a nested platform module", "apps/web/src/platform/sdk/loader.ts"],
+  ])("allows only console.warn and console.debug in %s", async (_label, relative) => {
+    const setting = await noConsole(relative);
+    expect(ruleSeverity(setting)).toBe(2);
+    expect(Array.isArray(setting) ? setting[1] : undefined).toEqual({
+      allow: ["warn", "debug"],
+    });
+  });
+
+  it.each([
+    ["the web entry", "apps/web/src/main.ts"],
+    ["a web module outside platform/", "apps/web/src/game-info.ts"],
+    ["the core entry", "packages/core/src/index.ts"],
+  ])("rejects every console call in %s", async (_label, relative) => {
+    const setting = await noConsole(relative);
+    expect(ruleSeverity(setting)).toBe(2);
+    // ESLint reports the rule's default options as an empty object.
+    expect(readKey(Array.isArray(setting) ? setting[1] : undefined, "allow")).toBe(
+      undefined,
+    );
+  });
+});
+
+describe("workspace build output in eslint.config.mjs", () => {
+  // A lint run after `pnpm build` must not read bundled or emitted code, which
+  // no tsconfig includes and nobody wrote.
+  it.each(["apps/web/dist/", ".package/crazygames/", ".tsbuild/core/"])(
+    "ignores %s",
+    async (entry) => {
+      expect(await ignoredByEslint(`${entry}probe.mjs`)).toBe(true);
+    },
+  );
+
+  it.each([".tsbuild/", ".package/"])(
+    "keeps %s out of git and Prettier",
+    async (entry) => {
+      const gitignore = readFileSync(path.join(repoRoot, ".gitignore"), "utf8").split(
+        "\n",
+      );
+      expect(gitignore).toContain(entry);
+      expect(await ignoredByPrettier(`${entry}probe.mjs`)).toBe(true);
+    },
+  );
+
+  it("still lints workspace source", async () => {
+    expect(await ignoredByEslint("apps/web/src/main.ts")).toBe(false);
+    expect(await ignoredByEslint("packages/core/src/index.ts")).toBe(false);
   });
 });
 

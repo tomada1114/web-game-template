@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { builtinModules } from "node:module";
 
 import js from "@eslint/js";
@@ -8,100 +7,51 @@ import eslintConfigPrettier from "eslint-config-prettier";
 import tseslint from "typescript-eslint";
 
 /**
- * The `export *` ban, shared by the whole `src/` tree and by the extra
- * index-only rules below.
+ * The `export *` ban for workspace source.
  *
  * @remarks
- * `no-restricted-syntax` options replace rather than merge across config
- * objects, so the narrower `src/index.ts` block has to restate this entry or
- * it would silently switch `export *` back on for the one file where it does
- * the most damage.
+ * A package entry re-exports each symbol by name, so what it exposes is
+ * readable in a diff of that one file.
  */
 const NO_EXPORT_STAR = {
   selector: "ExportAllDeclaration",
   message:
-    "`export *` publishes symbols implicitly. Re-export each public symbol by name from src/index.ts.",
+    "`export *` exposes symbols implicitly. Re-export each symbol by name from the package's src/index.ts.",
 };
 
-/** What `src/internal/**` is, in the words of the rule that made it private. */
-const INTERNAL_IS_PRIVATE =
-  'src/internal/ is private: see "Architecture" in AGENTS.md. Tests reach it through the public surface in src/index.ts (see the `writing-tests` skill), and repository automation must not depend on package internals at all.';
+/** Every Vitest file: repository-level, and each workspace package's own. */
+const TEST_FILES = ["tests/**/*.ts", "packages/*/test/**/*.ts", "apps/*/test/**/*.ts"];
 
-/**
- * Read one property off a value of unknown shape.
- *
- * @param {unknown} value - Candidate object.
- * @param {string} key - Property to read.
- * @returns {unknown} The property value, or undefined when absent.
- */
-function readKey(value, key) {
-  if (typeof value !== "object" || value === null || !(key in value)) {
-    return undefined;
-  }
-  return /** @type {Record<string, unknown>} */ (value)[key];
-}
+/** Globals that exist only in Node. */
+const NODE_GLOBALS = [
+  "process",
+  "Buffer",
+  "global",
+  "__dirname",
+  "__filename",
+  "require",
+  "module",
+  "exports",
+  "setImmediate",
+  "clearImmediate",
+];
 
-/**
- * The `universal-library` profile forbids Node built-ins in `src/` by emptying
- * `compilerOptions.types` in the build config. Reading that back here keeps the
- * profile encoded in exactly one place instead of duplicating a profile flag
- * that could drift out of sync with what actually compiles.
- *
- * @returns {boolean} True when `src/` must stay runtime-agnostic.
- */
-function isUniversalProfile() {
-  const raw = readFileSync(new URL("tsconfig.build.json", import.meta.url), "utf8");
-  // The build config is JSONC; strip full-line comments before parsing.
-  /** @type {unknown} */
-  const parsed = JSON.parse(raw.replace(/^\s*\/\/.*$/gm, ""));
-  const types = readKey(readKey(parsed, "compilerOptions"), "types");
-  return Array.isArray(types) && types.length === 0;
-}
-
-/** @type {import("eslint").Linter.Config[]} */
-const universalSourceRestrictions = isUniversalProfile()
-  ? [
-      {
-        name: "universal-profile/no-node-builtins",
-        files: ["src/**/*.ts"],
-        rules: {
-          "no-restricted-imports": [
-            "error",
-            {
-              patterns: [
-                {
-                  group: [
-                    "node:*",
-                    ...builtinModules.filter((name) => !name.startsWith("node:")),
-                  ],
-                  message:
-                    "The universal-library profile must run outside Node. Keep Node-only code in a separate package.",
-                },
-              ],
-            },
-          ],
-          "no-restricted-globals": [
-            "error",
-            ...[
-              "process",
-              "Buffer",
-              "global",
-              "__dirname",
-              "__filename",
-              "require",
-              "module",
-              "exports",
-              "setImmediate",
-              "clearImmediate",
-            ].map((name) => ({
-              name,
-              message: "The universal-library profile cannot depend on Node globals.",
-            })),
-          ],
-        },
-      },
-    ]
-  : [];
+/** Globals that exist only in a browser page. */
+const DOM_GLOBALS = [
+  "window",
+  "document",
+  "navigator",
+  "location",
+  "history",
+  "localStorage",
+  "sessionStorage",
+  "indexedDB",
+  "fetch",
+  "XMLHttpRequest",
+  "requestAnimationFrame",
+  "cancelAnimationFrame",
+  "alert",
+];
 
 export default defineConfig([
   // Only generated trees are ignored; everything hand-written is linted,
@@ -112,9 +62,15 @@ export default defineConfig([
   // `.claude/worktrees/` holds full working copies created by agent sessions,
   // linted in their own checkout.
   // A `tests/fixtures/` file is malformed on purpose, so linting it reports
-  // the very defect a test asserts on.
+  // the very defect a test asserts on. Build output (`apps/*/dist/`, the
+  // portal package under `.package/`, and the declarations `tsc -b` writes to
+  // `.tsbuild/`) is bundled or emitted code no tsconfig includes, so a lint
+  // after a build would otherwise fail on files nobody wrote.
   globalIgnores([
     "dist/",
+    "apps/*/dist/",
+    ".package/",
+    ".tsbuild/",
     "coverage/",
     ".claude/skills/",
     ".claude/worktrees/",
@@ -160,12 +116,11 @@ export default defineConfig([
     },
   },
   {
-    name: "public-api/explicit-surface",
-    files: ["src/**/*.ts"],
+    name: "source/explicit-exports",
+    files: ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts"],
     rules: {
-      // The published contract is named exports from src/index.ts. A default
-      // export has no stable name for consumers to import, or for a reviewer
-      // to read a diff of.
+      // A default export has no stable name for an importer to use, or for a
+      // reviewer to read a diff of.
       "no-restricted-exports": [
         "error",
         {
@@ -192,36 +147,63 @@ export default defineConfig([
     },
   },
   {
-    name: "public-api/internal-stays-private",
-    files: ["src/index.ts"],
+    // packages/core's tsconfig already compiles with no DOM and no Node types;
+    // this names the boundary at the import or the reference itself, so the
+    // message says why instead of only "Cannot find name".
+    name: "boundaries/core-is-runtime-free",
+    files: ["packages/core/src/**/*.ts"],
     rules: {
-      // src/index.ts is the whole published contract, so a re-export here is
-      // the one edit that can publish a private symbol by accident. The
-      // directory name is not the boundary — this line is.
-      //
-      // Anchored on the path segment, not on the bare word: an unanchored
-      // /internal/ also matches a specifier that merely starts with those
-      // letters, so a legitimate `./internal-format.js` re-export would be
-      // rejected for a private directory it is not in. src/index.ts sits
-      // beside the directory, so `./internal/` is the only spelling that can
-      // reach it.
-      "no-restricted-syntax": [
+      "no-restricted-imports": [
         "error",
-        NO_EXPORT_STAR,
         {
-          selector: "ExportNamedDeclaration[source.value=/^\\.\\/internal\\//]",
-          message:
-            "exporting an internal symbol publishes it — move it to a public module first",
+          patterns: [
+            {
+              group: [
+                "node:*",
+                ...builtinModules.filter((name) => !name.startsWith("node:")),
+              ],
+              message:
+                'packages/core runs without Node: see "Architecture" in AGENTS.md. Read the value in apps/web and pass it in.',
+            },
+          ],
         },
-        {
-          selector: "ExportAllDeclaration[source.value=/^\\.\\/internal\\//]",
+      ],
+      "no-restricted-globals": [
+        "error",
+        ...NODE_GLOBALS.map((name) => ({
+          name,
           message:
-            "exporting an internal symbol publishes it — move it to a public module first",
+            'packages/core runs without Node: see "Architecture" in AGENTS.md. Read the value in apps/web and pass it in.',
+        })),
+        ...DOM_GLOBALS.map((name) => ({
+          name,
+          message:
+            'packages/core runs without a DOM: see "Architecture" in AGENTS.md. Read the value in apps/web and pass it in.',
+        })),
+      ],
+    },
+  },
+  {
+    name: "boundaries/core-through-its-entry",
+    files: ["apps/**/*.ts"],
+    rules: {
+      // Core's entry is its package name, whose `exports` map names only
+      // packages/core/src/index.ts. A relative path into its source tree would
+      // reach modules that entry deliberately does not expose.
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/packages/*/src", "**/packages/*/src/**"],
+              message:
+                'Import a workspace package by its name, never by a path into its source: see "Architecture" in AGENTS.md.',
+            },
+          ],
         },
       ],
     },
   },
-  ...universalSourceRestrictions,
   {
     name: "automation/node-scripts",
     files: ["scripts/**/*.mjs", ".agents/skills/**/*.mjs"],
@@ -238,13 +220,13 @@ export default defineConfig([
     },
   },
   {
-    name: "cli/terminal-output",
-    files: ["src/cli.ts", "src/cli/**/*.ts"],
+    name: "web/platform-diagnostics",
+    files: ["apps/web/src/platform/**/*.ts"],
     rules: {
-      // Terminal output is the product of a command. Keep this exception at
-      // the command boundary so library modules still cannot print as a side
-      // effect of an import.
-      "no-console": "off",
+      // The platform adapter is where the game meets a portal SDK or the
+      // browser, so it is the one place a warning or a debug trace is the
+      // product. `console.log` stays an error even here.
+      "no-console": ["error", { allow: ["warn", "debug"] }],
     },
   },
   {
@@ -254,7 +236,7 @@ export default defineConfig([
     // "warn", starting with the two that quietly shrink the suite.
     ...vitest.configs.recommended,
     name: "tests/vitest-rules",
-    files: ["tests/**/*.ts"],
+    files: TEST_FILES,
     rules: {
       ...vitest.configs.recommended.rules,
 
@@ -292,35 +274,10 @@ export default defineConfig([
   },
   {
     name: "tests/relaxations",
-    files: ["tests/**/*.ts"],
+    files: TEST_FILES,
     rules: {
       // Tests deliberately construct invalid input to prove it is rejected.
       "@typescript-eslint/no-confusing-void-expression": "off",
-    },
-  },
-  {
-    name: "boundaries/internal-is-not-importable",
-    files: ["tests/**/*.ts", "scripts/**/*.mjs"],
-    rules: {
-      "no-restricted-imports": [
-        "error",
-        {
-          patterns: [
-            {
-              // Both trees: `src/internal` is the module, `dist/internal` is
-              // the same module after a build, and neither is importable from
-              // outside `src/**`.
-              group: [
-                "**/src/internal",
-                "**/src/internal/**",
-                "**/dist/internal",
-                "**/dist/internal/**",
-              ],
-              message: INTERNAL_IS_PRIVATE,
-            },
-          ],
-        },
-      ],
     },
   },
   // Must stay last: turns off stylistic rules that would fight Prettier.
