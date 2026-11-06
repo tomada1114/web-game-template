@@ -33,7 +33,9 @@ workspace packages (`@<slug>/core`, `@<slug>/web`). It and the display title are
 so that `GAME_SLUG` and `GAME_TITLE` in `apps/web/src/game-info.ts` stay on one line at
 Prettier's print width, and the title refuses a double quote, a backslash, and control
 characters — the characters a TypeScript literal would need escaped in a form Prettier
-rewrites. An `&`, `<` or `>` is escaped for `apps/web/index.html` instead.
+rewrites. An `&`, `<` or `>` is escaped for `apps/web/index.html` instead, and the
+escaped form has a width cap of its own; two spaces in a row are refused, because
+Prettier collapses them in HTML text.
 
 `bootstrap()` runs `transform()` twice: once as a dry-run into an in-memory `preview`
 Map (never touching disk), then for real only after the dry-run passes every check

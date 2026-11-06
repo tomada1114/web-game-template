@@ -199,7 +199,10 @@ describe("bootstrap validation", () => {
     ["Back\\slash", "ERR_TITLE_INVALID"],
     ["Tab\tinside", "ERR_TITLE_INVALID"],
     ["Delete\u007f", "ERR_TITLE_INVALID"],
+    ["Two  spaces", "ERR_TITLE_INVALID"],
     ["T".repeat(60), "ERR_TITLE_LENGTH"],
+    // 59 columns raw, 71 once each `&` becomes `&amp;`.
+    [`${"&".repeat(3)}${"T".repeat(56)}`, "ERR_TITLE_LENGTH"],
     ["ゲ".repeat(30), "ERR_TITLE_LENGTH"],
   ])("rejects the title %j with %s", (title, code) => {
     expect(() => validateTitle(title)).toThrow(BootstrapError);
@@ -602,6 +605,8 @@ describe("bootstrap generation", () => {
   it.each([
     ["an ASCII title", "T".repeat(59)],
     ["a wide-character title", "ゲ".repeat(29)],
+    // 59 columns raw and 69, the index.html limit, once escaped.
+    ["a title that grows when escaped", `&<${"T".repeat(56)}>`],
   ])(
     "keeps the generated tree Prettier-clean for the longest slug and %s",
     async (_label, title) => {

@@ -40,11 +40,13 @@ const PLACEHOLDERS = [
   TEMPLATE_DESCRIPTION,
 ];
 // Both values are substituted into `export const GAME_SLUG = "<slug>";` and
-// `export const GAME_TITLE = "<title>";` in apps/web/src/game-info.ts. Past
-// these widths Prettier (printWidth 88) breaks the line after `=`, and the
-// generated repository fails its own first `pnpm format:check`.
+// `export const GAME_TITLE = "<title>";` in apps/web/src/game-info.ts, and the
+// HTML-escaped title into `    <title>…</title>` in apps/web/index.html. Past
+// these widths Prettier (printWidth 88) breaks the line, and the generated
+// repository fails its own first `pnpm format:check`.
 const SLUG_MAX_LENGTH = 60;
 const TITLE_MAX_COLUMNS = 59;
+const TITLE_HTML_MAX_COLUMNS = 69;
 const GENERATED_VERSION = "0.0.0";
 const GENERATED_CHANGELOG = `# Changelog
 
@@ -344,10 +346,21 @@ export function validateTitle(title) {
       "--title must not contain a double quote, a backslash, or a control character.",
     );
   }
-  if (displayColumns(title) > TITLE_MAX_COLUMNS) {
+  // Prettier collapses a run of spaces in HTML text, so index.html would no
+  // longer match the title game-info.ts carries.
+  if (title.includes("  ")) {
+    throw new BootstrapError(
+      "ERR_TITLE_INVALID",
+      "--title must not contain two spaces in a row.",
+    );
+  }
+  if (
+    displayColumns(title) > TITLE_MAX_COLUMNS ||
+    displayColumns(escapeHtml(title)) > TITLE_HTML_MAX_COLUMNS
+  ) {
     throw new BootstrapError(
       "ERR_TITLE_LENGTH",
-      `--title must fit in ${String(TITLE_MAX_COLUMNS)} columns (a non-ASCII character counts as two).`,
+      `--title must fit in ${String(TITLE_MAX_COLUMNS)} columns, and in ${String(TITLE_HTML_MAX_COLUMNS)} once HTML-escaped (a non-ASCII character counts as two).`,
     );
   }
 }
