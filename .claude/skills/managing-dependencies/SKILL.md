@@ -12,9 +12,8 @@ description: >
 # Managing Dependencies
 
 **Owns:** whether a package may exist in this repository at all, and what happens at
-install time. **Does not own:** landing an existing bot PR (`merge-dependabot`); the
-semver consequence of a bump for this package's own published version
-(`release-impact`).
+install time. **Does not own:** landing an existing bot PR (`merge-dependabot`); whether
+a bump needs a release (`releasing-builds`).
 
 ## The review record a new runtime dependency needs
 
@@ -28,33 +27,18 @@ detail to fill in later — it means the review has not actually happened yet.
   dependency needs a reason beyond convenience.
 - Maintainer and release continuity — actively maintained, not abandoned.
 - License compatibility (MIT/BSD/Apache-class; a copyleft license needs a deliberate,
-  explicit reason for a published library).
+  explicit reason for code that ships in the game bundle).
 - Direct and transitive package count it pulls in — a large transitive surface is a real
   cost even behind a small direct API.
 - Whether it runs an install script, ships a native binary, or does network access —
   each needs its own justification, and an install script also needs an `allowBuilds`
   entry (see below).
-- Unpacked size and its effect on this package's own published tarball.
+- Unpacked size and its effect on the built bundle.
 - Supported Node versions and module format (ESM/CJS) against this package's own
   `engines`/`exports` in `package.json`.
 - Open security advisories and npm provenance.
 - Which of `dependencies`, `devDependencies`, `peerDependencies`, or
   `optionalDependencies` it belongs in, and why.
-
-## The first runtime dependency in a generated repository
-
-The repository's packaging tests cover a declared dependency separately from a bundled
-installed-dependency directory, and the consumer smoke suite may mock npm at its
-subprocess boundary for fast branch coverage. That mock does not prove that a package
-manager can resolve the dependency, or that this repository's cooldown, trust, and
-lifecycle rules permit it.
-
-When a generated repository adds its first runtime dependency, land the manifest and
-lockfile change only after running `pnpm package:check` and `pnpm package:smoke` for
-real. Those commands exercise the packed manifest and an actual throwaway consumer
-install; keep the dependency declared in `dependencies`, never bundle it into the
-tarball, and do not treat the mocked unit/automation case as a substitute for either
-real command.
 
 ## What a `peerDependencies` entry actually does here
 
@@ -65,16 +49,9 @@ do with one differs, which is worth knowing before you rely on either:
   dependency, picking the **highest** version matching the range. A `devDependencies`
   entry naming the same package wins instead, and pnpm does not complain when that entry
   falls outside the declared peer range.
-- The consumer smoke test (`scripts/smoke-package.mjs`) installs the tarball with
-  `npm install --legacy-peer-deps`, so the throwaway consumer never fetches a peer from
-  the network and `node_modules` holds only the package under test. That is what proves
-  the more useful thing: the published package installs and its `bin` runs _before_ the
-  consumer has the peer in place, which is the real first-run experience of
-  `npx <tool>`. A `bin` that actually needs the peer at runtime must therefore fail with
-  its own diagnostic, not a bare module-resolution stack trace.
 - Whether the declared range itself is satisfiable by anything on the registry is not
   tested here — asserting that needs the real network by definition, so it belongs in a
-  separate CI job, not in the offline smoke test.
+  separate CI job.
 
 ## Testing against a version the ceiling forbids
 
@@ -157,19 +134,18 @@ the prohibition on relaxing it.
 - `verifyDepsBeforeRun: error`: a `pnpm run` whose `node_modules` no longer matches the
   lockfile fails instead of letting a gate pass against stale dependencies. The fix is
   `pnpm install`, never a weaker value. pnpm compares dependency fields and the settings
-  above, so an unrelated manifest rewrite — the minimum-Node CI leg's
-  `git restore package.json` — only costs a deeper check, not a failure.
+  above, so an unrelated manifest rewrite only costs a deeper check, not a failure.
 
 ## TypeScript version ceiling
 
-`typescript` is held below the version that `typescript-eslint` and `typedoc` cap their
-peer support at (see `package.json`'s `devDependencies` for the current range). With
+`typescript` is held below the version that `typescript-eslint` caps its peer support at
+(see `package.json`'s `devDependencies` for the current range). With
 `strictPeerDependencies` on, a bump past that ceiling fails the install rather than
 merely warning.
 
 Do not "upgrade typescript to latest." Raising this ceiling is a coordinated
-multi-package upgrade — `typescript-eslint` and `typedoc` both need to raise their own
-peer ranges first — not a routine dependency bump.
+multi-package upgrade — `typescript-eslint` needs to raise its own peer range first —
+not a routine dependency bump.
 
 ## Handoff
 

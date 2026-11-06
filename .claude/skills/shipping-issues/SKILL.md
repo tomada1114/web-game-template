@@ -11,7 +11,7 @@ description: >
 
 **Owns:** shipping explicitly requested issues through verified PRs and merges. **Does
 not own:** issue vocabulary (`triaging-issues`), release consequences
-(`release-impact`), or landing dependency bot PRs (`merge-dependabot`).
+(`releasing-builds`), or landing dependency bot PRs (`merge-dependabot`).
 
 Completion requires a merged PR on the default branch, the linked issue closed, and the
 required gates preserved. Record the remote-write scope authorized in the current
@@ -20,7 +20,7 @@ covers its in-scope labels, branches, pushes, PRs, follow-up issues, design comm
 and merges; a request to create only a PR stops at the PR. Reading this skill during
 analysis supplies no authorization. Green CI proves readiness within that scope.
 
-**REQUIRED:** `triaging-issues` when changing issue labels; `release-impact` for every
+**REQUIRED:** `triaging-issues` when changing issue labels; `releasing-builds` for every
 PR body. In Codex, load `managing-git-github-workflows` first and use the connected
 GitHub integration for supported remote operations. Bundled scripts using `gh` are a
 fallback when the integration cannot perform the operation.
@@ -132,9 +132,9 @@ Record the pass:
 
 Within the authorized scope, commit through the hooks, push, and create the PR against
 the default branch. Use the repository's PR template, the implementation summary,
-`Closes #N`, validation evidence, and the required release-impact statement. Verify the
-head, base, and closing link. Attach the created PR to the current task when the host
-supports that attachment.
+`Closes #N`, validation evidence, and the required release line. Verify the head, base,
+and closing link. Attach the created PR to the current task when the host supports that
+attachment.
 
 ### 6. CI to green
 

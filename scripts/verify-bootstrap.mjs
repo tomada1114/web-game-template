@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { MARKER_TARGETS, findPlaceholders } from "./bootstrap.mjs";
 import { isolatedGitEnv } from "./lib/git-env.mjs";
 import { isMain } from "./lib/is-main.mjs";
-import { parseJson, readKey, readString } from "./lib/json.mjs";
+import { parseJson, readKey } from "./lib/json.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const LEGACY_RELEASE_DIRECTORY = ".change" + "set";
@@ -97,14 +97,13 @@ export function run(command, args, cwd) {
  *
  * @param {string} destination
  * @param {string} packageName
- * @param {boolean} [cli=false]
  *
  * @remarks
  * Exported so `tests/verify-bootstrap.test.ts` can exercise each of its
  * failure branches directly against a hand-built fixture tree, rather than
  * only through a full, real `main()` bootstrap run.
  */
-export function assertGenerated(destination, packageName, cli = false) {
+export function assertGenerated(destination, packageName) {
   const placeholders = findPlaceholders(destination);
   if (placeholders.length > 0) {
     throw new Error(
@@ -180,80 +179,18 @@ export function assertGenerated(destination, packageName, cli = false) {
         "transform(), then rerun bootstrap:e2e.",
     );
   }
-  const bin = readKey(manifest, "bin");
-  if (!cli && bin !== undefined) {
+  if (readKey(manifest, "bin") !== undefined) {
     throw new Error(
       "ERR_BIN_REMAINING: generated package still declares package.json#bin.\n" +
-        "Expected: no bin entry when bootstrap runs with --cli no.\n" +
+        "Expected: no bin entry; bootstrap removes the sample command entry.\n" +
         "Next: remove bin metadata from the template, then rerun bootstrap:e2e.",
-    );
-  }
-  // The command a consumer types is the bin object's key, so verifying the path
-  // alone would accept a package whose command is unnamed or misnamed.
-  const command = packageName.slice(packageName.lastIndexOf("/") + 1);
-  if (
-    cli &&
-    (readString(bin, command) !== "./dist/cli.js" ||
-      !existsSync(path.join(destination, "src", "cli.ts")))
-  ) {
-    throw new Error(
-      `ERR_BIN_REMAINING: generated CLI package has no emitted CLI entry.\n` +
-        `Expected: package.json#bin['${command}'] === './dist/cli.js' and src/cli.ts exists.\n` +
-        "Next: keep src/cli.ts and point bin at its emitted dist/cli.js, then rerun bootstrap:e2e.",
     );
   }
   if (readKey(manifest, "sideEffects") !== false) {
     throw new Error(
       "ERR_SIDE_EFFECTS_REMAINING: generated package does not declare sideEffects as false.\n" +
-        "Expected: sideEffects: false in both remaining profiles.\n" +
+        "Expected: sideEffects: false.\n" +
         "Next: update the template manifest, then rerun bootstrap:e2e.",
-    );
-  }
-
-  const nodeEngines = readString(readKey(manifest, "engines"), "node");
-  const workflow = readFileSync(
-    path.join(destination, ".github", "workflows", "ci.yml"),
-    "utf8",
-  );
-  if (workflow.includes("# bootstrap-node-floor")) {
-    throw new Error(
-      `ERR_NODE_ENGINES_CI_MISMATCH: generated ${packageName} still carries the ` +
-        "bootstrap-node-floor marker in ci.yml.\n" +
-        "Expected: bootstrap's placeholder rewrite drops that trailing comment.\n" +
-        "Next: check CI_NODE_FLOOR_LINE's replacement in transform(), then rerun bootstrap:e2e.",
-    );
-  }
-  const packageFloorStart = workflow.indexOf("\n  package-floor:");
-  const packageFloor =
-    packageFloorStart === -1 ? "" : workflow.slice(packageFloorStart);
-  if (nodeEngines === undefined) {
-    // universal-library declares no floor, so there is nothing for the
-    // package-floor job to verify — bootstrap removes the whole job.
-    if (packageFloorStart !== -1) {
-      throw new Error(
-        `ERR_NODE_ENGINES_CI_MISMATCH: generated ${packageName} declares no ` +
-          "engines.node but still ships the package-floor CI job.\n" +
-          "Expected: no package-floor job when the package publishes no Node floor.\n" +
-          "Next: check the `# profile:node-library:` block wrapping package-floor in " +
-          "ci.yml, then rerun bootstrap:e2e.",
-      );
-    }
-    return;
-  }
-  const floor = /^>=(\d+)$/.exec(nodeEngines)?.[1];
-  if (floor === undefined || !packageFloor.includes(`node-version: ${floor}`)) {
-    throw new Error(
-      `ERR_NODE_ENGINES_CI_MISMATCH: generated ${packageName} publishes ${nodeEngines}, ` +
-        "but its package-floor CI leg does not run that major.\n" +
-        "Expected: the package-floor job's node-version to equal engines.node's >=N floor.\n" +
-        "Next: rerun bootstrap with a supported --node-engines range and regenerate ci.yml.",
-    );
-  }
-  if (!packageFloor.includes("package:smoke")) {
-    throw new Error(
-      `ERR_NODE_ENGINES_CI_MISMATCH: generated ${packageName} has no package:smoke floor check.\n` +
-        "Expected: package-floor runs package:smoke against the packed artifact.\n" +
-        "Next: restore the package-floor job in ci.yml, then rerun bootstrap:e2e.",
     );
   }
 }
@@ -340,54 +277,30 @@ export function main(argv = [], runner = run) {
   const workspace = mkdtempSync(path.join(tmpdir(), "typescript-template-e2e-"));
   let passed = false;
   try {
-    /** @type {readonly [string | undefined, string | undefined, boolean | undefined, string | undefined][]} */
-    const cases = [
-      ["node-library", "acme-node-library", false, ">=24"],
-      ["node-library", "acme-node-cli", true, ">=20"],
-      ["universal-library", "acme-universal-library", false, ">=24"],
-    ];
-    for (const [profile, packageName, cli, nodeEngines] of cases) {
-      if (
-        profile === undefined ||
-        packageName === undefined ||
-        cli === undefined ||
-        nodeEngines === undefined
-      ) {
-        throw new Error("ERR_E2E_CASE: malformed bootstrap test case.");
-      }
-      const destination = path.join(workspace, packageName);
-      mkdirSync(destination);
-      copyTemplate(destination);
-      runner(
-        process.execPath,
-        [
-          "scripts/bootstrap.mjs",
-          packageName,
-          "--profile",
-          profile,
-          "--author",
-          "Ada Lovelace",
-          "--email",
-          "ada@example.com",
-          "--github-user",
-          "ada",
-          "--license",
-          "MIT",
-          "--node-engines",
-          nodeEngines,
-          ...(cli ? ["--cli", "yes"] : []),
-        ],
-        destination,
-      );
-      assertGenerated(destination, packageName, cli);
-      if (argv[0] === "--check") {
-        runner("pnpm", ["install", "--frozen-lockfile"], destination);
-        runner("pnpm", ["run", "check"], destination);
-      }
-      console.log(
-        `bootstrap-e2e: ${packageName} (${profile}, cli=${String(cli)}, engines=${nodeEngines}) passed`,
-      );
+    const packageName = "acme-game";
+    const destination = path.join(workspace, packageName);
+    mkdirSync(destination);
+    copyTemplate(destination);
+    runner(
+      process.execPath,
+      [
+        "scripts/bootstrap.mjs",
+        packageName,
+        "--author",
+        "Ada Lovelace",
+        "--github-user",
+        "ada",
+        "--license",
+        "MIT",
+      ],
+      destination,
+    );
+    assertGenerated(destination, packageName);
+    if (argv[0] === "--check") {
+      runner("pnpm", ["install", "--frozen-lockfile"], destination);
+      runner("pnpm", ["run", "check"], destination);
     }
+    console.log(`bootstrap-e2e: ${packageName} passed`);
     passed = true;
     return 0;
   } finally {

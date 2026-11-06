@@ -2,10 +2,10 @@
 name: designing-errors
 description: >
   Covers the shape of a package error class and the vocabulary of its `code` string, for
-  both `src/errors.ts`-style errors and `scripts/**` error codes such as `ERR_SMOKE_*`.
-  Use when adding or changing an `Error` subclass, choosing or renaming an `ERR_*` code,
-  deciding what a rejected-input error should carry, or wiring an `AbortSignal`
-  rejection reason.
+  both `src/errors.ts`-style errors and `scripts/**` error codes such as
+  `ERR_BOOTSTRAP_*`. Use when adding or changing an `Error` subclass, choosing or
+  renaming an `ERR_*` code, deciding what a rejected-input error should carry, or wiring
+  an `AbortSignal` rejection reason.
 ---
 
 # Designing Errors
@@ -71,8 +71,8 @@ export class RateLimitError extends Error {
 - `ERR_` prefix, `SCREAMING_SNAKE_CASE`, describing the failure rather than the function
   that raised it (`ERR_TIMEOUT`, not `ERR_WITH_TIMEOUT_FAILED`).
 - A `scripts/**` error code additionally carries the stage prefix that raised it
-  (`ERR_SMOKE_*`, `ERR_ATTW_*`, `ERR_DEPENDENCY_*`), so the code alone — without opening
-  the script — tells you which check to go read. Pick an existing stage prefix over
+  (`ERR_BOOTSTRAP_*`, `ERR_DEPENDENCY_*`), so the code alone — without opening the
+  script — tells you which check to go read. Pick an existing stage prefix over
   inventing a new one when the failure belongs to a check that already has one.
 - When a function can fail for several structurally different reasons, model them as a
   discriminated union keyed on `code` (or a shared base class per reason) rather than
@@ -83,6 +83,6 @@ export class RateLimitError extends Error {
 ## Changing a `code`
 
 Adding, renaming, or removing a `code` on a publicly reachable error changes what a
-consumer's `switch (error.code)` compiles against — it is a change to the published
-contract, not an implementation detail. **REQUIRED:** `release-impact` for what that
-means for the semver bump.
+caller's `switch (error.code)` compiles against — it is a contract change, not an
+implementation detail. **REQUIRED:** `releasing-builds` for whether that change needs a
+release.

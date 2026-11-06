@@ -8,16 +8,8 @@ dist/
 # Test and coverage output
 coverage/
 
-# Scratch directories used by the package gates. A successful full check
-# removes .package, while a focused smoke failure retains its exact tarball
-# for inspection. `pnpm clean` removes them all.
+# Packaging scratch directory. `pnpm clean` removes it.
 .package/
-.smoke/
-.attw/
-
-# Generated API documentation. Anything else under docs/ is hand-written and
-# tracked.
-docs/api/
 
 # Tool caches
 .eslintcache

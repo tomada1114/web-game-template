@@ -6,9 +6,8 @@ import { describe, expect, it } from "vitest";
 
 // This file exists for exactly one reason: to hold assertions that describe
 // this checkout's *pre-bootstrap* state — the lightweight `bootstrap:` job in
-// ci.yml, the `# bootstrap-node-floor` marker comment, this template's default
-// `>=24` published floor — none of which is true once `scripts/bootstrap.mjs`
-// has run. `scripts/bootstrap.mjs`'s `SELF_REMOVED_PATHS` deletes this file
+// ci.yml and this template's default `>=24` Node floor — neither of which
+// has to hold once `scripts/bootstrap.mjs` has run. `scripts/bootstrap.mjs`'s `SELF_REMOVED_PATHS` deletes this file
 // alongside its own script and `tests/bootstrap.test.ts`, so a generated
 // repository never sees it. Everything else that used to live next to these
 // assertions in `tests/workflows.test.ts` reads its expectations from the
@@ -40,16 +39,13 @@ describe("this checkout's own bootstrap tooling", () => {
     expect(source.toLowerCase()).not.toContain("change" + "set");
   });
 
-  it("still carries the marker bootstrap rewrites the package-floor node-version with", () => {
+  it("carries no package-floor job or node-floor marker for bootstrap to rewrite", () => {
     const source = workflowSource("ci.yml");
-    const packageFloorStart = source.indexOf("  package-floor:");
-    expect(packageFloorStart).toBeGreaterThan(-1);
-    expect(source.slice(packageFloorStart)).toContain(
-      "node-version: 24 # bootstrap-node-floor",
-    );
+    expect(source).not.toContain("  package-floor:");
+    expect(source).not.toContain("# bootstrap-node-floor");
   });
 
-  it("keeps the template's default published floor explicit", () => {
+  it("keeps the template's default Node floor explicit", () => {
     const manifest = JSON.parse(
       readFileSync(path.join(repoRoot, "package.json"), "utf8"),
     ) as { engines?: { node?: string } };

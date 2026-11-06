@@ -238,60 +238,60 @@ describe("assertGenerated", () => {
 
   it("passes for a well-formed generated repository", () => {
     const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library");
+    writeValidFixture(destination, "acme-game");
 
-    expect(() => assertGenerated(destination, "acme-node-library")).not.toThrow();
+    expect(() => assertGenerated(destination, "acme-game")).not.toThrow();
   });
 
   it("throws ERR_PLACEHOLDER_REMAINING when a placeholder target still holds a placeholder", () => {
     const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library");
+    writeValidFixture(destination, "acme-game");
     // README.md is both a marker target and a placeholder target; "my-package"
     // mirrors bootstrap.mjs's own TEMPLATE_PACKAGE constant.
     writeFileSync(path.join(destination, "README.md"), "# my-package\n");
 
-    expect(() => assertGenerated(destination, "acme-node-library")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game")).toThrow(
       /ERR_PLACEHOLDER_REMAINING/,
     );
   });
 
   it("throws ERR_BOOTSTRAP_MARKER when a marker target retains a bootstrap marker", () => {
     const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library");
+    writeValidFixture(destination, "acme-game");
     writeFileSync(
       path.join(destination, ".github", "workflows", "ci.yml"),
       "# template-only block\n",
     );
 
-    expect(() => assertGenerated(destination, "acme-node-library")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game")).toThrow(
       /ERR_BOOTSTRAP_MARKER/,
     );
   });
 
   it("throws ERR_RELEASE_INTENT_PATH_REMAINING when the legacy .changeset directory remains", () => {
     const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library");
+    writeValidFixture(destination, "acme-game");
     mkdirSync(path.join(destination, ".changeset"), { recursive: true });
 
-    expect(() => assertGenerated(destination, "acme-node-library")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game")).toThrow(
       /ERR_RELEASE_INTENT_PATH_REMAINING/,
     );
   });
 
   it("throws ERR_BOOTSTRAP_SCRIPT_REMAINING when scripts/bootstrap.mjs remains", () => {
     const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library");
+    writeValidFixture(destination, "acme-game");
     mkdirSync(path.join(destination, "scripts"), { recursive: true });
     writeFileSync(path.join(destination, "scripts", "bootstrap.mjs"), "export {};\n");
 
-    expect(() => assertGenerated(destination, "acme-node-library")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game")).toThrow(
       /ERR_BOOTSTRAP_SCRIPT_REMAINING/,
     );
   });
 
   it("passes when every routed skill in AGENTS.md's Skills table has a directory", () => {
     const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library");
+    writeValidFixture(destination, "acme-game");
     writeFileSync(
       path.join(destination, "AGENTS.md"),
       "## Skills\n\n" +
@@ -303,12 +303,12 @@ describe("assertGenerated", () => {
       recursive: true,
     });
 
-    expect(() => assertGenerated(destination, "acme-node-library")).not.toThrow();
+    expect(() => assertGenerated(destination, "acme-game")).not.toThrow();
   });
 
   it("throws ERR_BOOTSTRAP_STALE_SKILL_ROUTE when a routed skill has no directory", () => {
     const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library");
+    writeValidFixture(destination, "acme-game");
     // Same shape as an unremoved SELF_REMOVED_PATHS entry would leave behind:
     // a row naming a skill whose directory bootstrap already removed.
     writeFileSync(
@@ -319,30 +319,30 @@ describe("assertGenerated", () => {
         "| `bootstrapping-the-template` | the bootstrap flow |\n",
     );
 
-    expect(() => assertGenerated(destination, "acme-node-library")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game")).toThrow(
       /ERR_BOOTSTRAP_STALE_SKILL_ROUTE/,
     );
   });
 
   it("throws ERR_CHANGELOG_ENTRY_REMAINING when the changelog retains a version heading", () => {
     const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library");
+    writeValidFixture(destination, "acme-game");
     writeFileSync(
       path.join(destination, "CHANGELOG.md"),
       "# Changelog\n\n## 1.0.0 - 2024-01-01\n",
     );
 
-    expect(() => assertGenerated(destination, "acme-node-library")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game")).toThrow(
       /ERR_CHANGELOG_ENTRY_REMAINING/,
     );
   });
 
   it("throws ERR_MANIFEST_SHAPE when package.json does not parse to an object", () => {
     const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library");
+    writeValidFixture(destination, "acme-game");
     writeFileSync(path.join(destination, "package.json"), "null\n");
 
-    expect(() => assertGenerated(destination, "acme-node-library")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game")).toThrow(
       /ERR_MANIFEST_SHAPE/,
     );
   });
@@ -351,151 +351,32 @@ describe("assertGenerated", () => {
     const destination = makeDestination();
     writeValidFixture(destination, "some-other-name");
 
-    expect(() => assertGenerated(destination, "acme-node-library")).toThrow(
-      /ERR_PACKAGE_NAME/,
-    );
+    expect(() => assertGenerated(destination, "acme-game")).toThrow(/ERR_PACKAGE_NAME/);
   });
 
   it("throws ERR_VERSION_REMAINING when package.json#version is not 0.0.0", () => {
     const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library", { version: "1.0.0" });
+    writeValidFixture(destination, "acme-game", { version: "1.0.0" });
 
-    expect(() => assertGenerated(destination, "acme-node-library")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game")).toThrow(
       /ERR_VERSION_REMAINING/,
     );
   });
 
   it("throws ERR_BIN_REMAINING when package.json still declares bin", () => {
     const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library", { bin: "./dist/cli.js" });
+    writeValidFixture(destination, "acme-game", { bin: "./dist/cli.js" });
 
-    expect(() => assertGenerated(destination, "acme-node-library")).toThrow(
-      /ERR_BIN_REMAINING/,
-    );
-  });
-
-  it("accepts a CLI-shaped generated repository", () => {
-    const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library", {
-      bin: { "acme-node-library": "./dist/cli.js" },
-    });
-    mkdirSync(path.join(destination, "src"), { recursive: true });
-    writeFileSync(path.join(destination, "src", "cli.ts"), "export {};");
-
-    expect(() => assertGenerated(destination, "acme-node-library", true)).not.toThrow();
-  });
-
-  it("accepts a generated Node floor whose CI package-smoke leg uses the same major", () => {
-    const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library", {
-      engines: { node: ">=20" },
-    });
-    writeFileSync(
-      path.join(destination, ".github", "workflows", "ci.yml"),
-      [
-        "jobs:",
-        "  package-floor:",
-        "    steps:",
-        "      - uses: actions/setup-node@sha # v1.0.0",
-        "        with:",
-        "          node-version: 20",
-        "      - run: pnpm --config.runtime-on-fail=ignore run package:smoke -- --pack-dir .smoke",
-        "",
-      ].join("\n"),
-    );
-
-    expect(() => assertGenerated(destination, "acme-node-library")).not.toThrow();
-  });
-
-  it("throws ERR_NODE_ENGINES_CI_MISMATCH when the generated CI floor drifts", () => {
-    const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library", {
-      engines: { node: ">=20" },
-    });
-    writeFileSync(
-      path.join(destination, ".github", "workflows", "ci.yml"),
-      "  package-floor:\n    node-version: 24\n    run: pnpm run package:smoke\n",
-    );
-
-    expect(() => assertGenerated(destination, "acme-node-library")).toThrow(
-      /ERR_NODE_ENGINES_CI_MISMATCH/,
-    );
-  });
-
-  it("throws ERR_NODE_ENGINES_CI_MISMATCH when the bootstrap-node-floor marker survives a rewrite", () => {
-    const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library", {
-      engines: { node: ">=20" },
-    });
-    // node-version was rewritten to the selected floor, as expected, but the
-    // trailing marker comment incorrectly survived that rewrite too.
-    writeFileSync(
-      path.join(destination, ".github", "workflows", "ci.yml"),
-      [
-        "jobs:",
-        "  package-floor:",
-        "    steps:",
-        "      - uses: actions/setup-node@sha # v1.0.0",
-        "        with:",
-        "          node-version: 20 # bootstrap-node-floor",
-        "      - run: pnpm --config.runtime-on-fail=ignore run package:smoke -- --pack-dir .smoke",
-        "",
-      ].join("\n"),
-    );
-
-    expect(() => assertGenerated(destination, "acme-node-library")).toThrow(
-      /ERR_NODE_ENGINES_CI_MISMATCH/,
-    );
-  });
-
-  it("accepts a universal-library-shaped repository with no engines and no package-floor job", () => {
-    const destination = makeDestination();
-    writeValidFixture(destination, "acme-universal-library");
-    writeFileSync(
-      path.join(destination, ".github", "workflows", "ci.yml"),
-      "jobs:\n  test:\n    steps: []\n",
-    );
-
-    expect(() => assertGenerated(destination, "acme-universal-library")).not.toThrow();
-  });
-
-  it("throws ERR_NODE_ENGINES_CI_MISMATCH when engines is absent but package-floor still ships", () => {
-    const destination = makeDestination();
-    writeValidFixture(destination, "acme-universal-library");
-    writeFileSync(
-      path.join(destination, ".github", "workflows", "ci.yml"),
-      [
-        "jobs:",
-        "  package-floor:",
-        "    steps:",
-        "      - run: pnpm --config.runtime-on-fail=ignore run package:smoke -- --pack-dir .smoke",
-        "",
-      ].join("\n"),
-    );
-
-    expect(() => assertGenerated(destination, "acme-universal-library")).toThrow(
-      /ERR_NODE_ENGINES_CI_MISMATCH/,
-    );
-  });
-
-  it("throws ERR_BIN_REMAINING when a CLI package has no emitted CLI entry", () => {
-    const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library", {
-      bin: { "acme-node-library": "./dist/other.js" },
-    });
-    mkdirSync(path.join(destination, "src"), { recursive: true });
-    writeFileSync(path.join(destination, "src", "cli.ts"), "export {};");
-
-    expect(() => assertGenerated(destination, "acme-node-library", true)).toThrow(
+    expect(() => assertGenerated(destination, "acme-game")).toThrow(
       /ERR_BIN_REMAINING/,
     );
   });
 
   it("throws ERR_SIDE_EFFECTS_REMAINING when package.json#sideEffects is not false", () => {
     const destination = makeDestination();
-    writeValidFixture(destination, "acme-node-library", { sideEffects: undefined });
+    writeValidFixture(destination, "acme-game", { sideEffects: undefined });
 
-    expect(() => assertGenerated(destination, "acme-node-library")).toThrow(
+    expect(() => assertGenerated(destination, "acme-game")).toThrow(
       /ERR_SIDE_EFFECTS_REMAINING/,
     );
   });
@@ -516,12 +397,8 @@ describe("main", () => {
     expect(checks.map(({ args }) => args)).toEqual([
       ["install", "--frozen-lockfile"],
       ["run", "check"],
-      ["install", "--frozen-lockfile"],
-      ["run", "check"],
-      ["install", "--frozen-lockfile"],
-      ["run", "check"],
     ]);
-    expect(new Set(checks.map(({ cwd }) => cwd)).size).toBe(3);
+    expect(new Set(checks.map(({ cwd }) => cwd)).size).toBe(1);
     expect(checks.every(({ cwd }) => !existsSync(cwd))).toBe(true);
   });
 
@@ -538,8 +415,8 @@ describe("main", () => {
       }),
     ).toThrow("simulated generated check failure");
     expect(
-      readFileSync(path.join(retained, "acme-node-library", "package.json"), "utf8"),
-    ).toContain("acme-node-library");
+      readFileSync(path.join(retained, "acme-game", "package.json"), "utf8"),
+    ).toContain("acme-game");
   });
 
   it.each([{ argv: ["--unknown"] }, { argv: ["--check", "--unknown"] }])(
@@ -549,10 +426,10 @@ describe("main", () => {
     },
   );
 
-  it("bootstraps both profiles into a disposable workspace and validates the result", () => {
+  it("bootstraps the template into a disposable workspace and validates the result", () => {
     // A real, fast (well under a second) end-to-end run: main() copies this
     // repository's own tracked files, runs the real scripts/bootstrap.mjs
-    // subprocess against each profile, and validates the result with
+    // subprocess, and validates the result with
     // assertGenerated. This exercises main()'s full orchestration and both
     // run()/assertGenerated() success paths without any mocking.
     expect(main()).toBe(0);

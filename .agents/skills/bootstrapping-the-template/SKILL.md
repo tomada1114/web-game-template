@@ -1,12 +1,11 @@
 ---
 name: bootstrapping-the-template
 description: >
-  Covers the bootstrap flow that turns this template into a fresh package:
+  Covers the bootstrap flow that turns this template into a fresh repository:
   scripts/bootstrap.mjs, scripts/verify-bootstrap.mjs, tests/bootstrap.test.ts,
-  tests/verify-bootstrap.test.ts, tests/template-self.test.ts, the
-  node-library/universal-library profiles, and pnpm bootstrap:e2e. Use when changing
-  what bootstrap prompts for, transforms, or removes; adding or editing a profile;
-  touching PLACEHOLDER_TARGETS, MARKER_TARGETS, AI_LAYER_TARGETS, or
+  tests/verify-bootstrap.test.ts, tests/template-self.test.ts, and pnpm bootstrap:e2e.
+  Use when changing what bootstrap prompts for, transforms, or removes; touching
+  PLACEHOLDER_TARGETS, MARKER_TARGETS, AI_LAYER_TARGETS, or
   DANGLING_REFERENCE_EXEMPTIONS; or debugging ERR_AI_LAYER_REFERENCE,
   ERR_BOOTSTRAP_SCRIPT_REMAINING, or a bootstrap:e2e failure.
 ---
@@ -15,19 +14,19 @@ description: >
 
 **Owns:** the bootstrap flow — `scripts/bootstrap.mjs`, `scripts/verify-bootstrap.mjs`,
 `tests/bootstrap.test.ts`, `tests/verify-bootstrap.test.ts`,
-`tests/template-self.test.ts`, the bootstrap profiles, and `pnpm bootstrap:e2e`. **Does
-not own:** the general `.mjs` import/typing/git-safety contract every script under
-`scripts/` follows (`writing-repo-scripts`); test-body conventions (`writing-tests`);
-where a test file lives or its coverage floor (`placing-tests`); the published API
-surface (`public-api-contract`).
+`tests/template-self.test.ts`, and `pnpm bootstrap:e2e`. **Does not own:** the general
+`.mjs` import/typing/git-safety contract every script under `scripts/` follows
+(`writing-repo-scripts`); test-body conventions (`writing-tests`); where a test file
+lives or its coverage floor (`placing-tests`).
 
 ## The flow end to end
 
-`scripts/bootstrap.mjs` turns a fresh clone of this template into a real package, once.
-`main()` collects package metadata — interactively via `promptArguments`, or
-non-interactively from `<package-name>` plus `--profile`/`--cli`/`--node-engines`/
-`--author`/`--email`/`--github-user`/`--license` flags (`parseArguments`) — then calls
-`bootstrap(root, options)`.
+`scripts/bootstrap.mjs` turns a fresh clone of this template into a real repository,
+once. The template has one shape, so bootstrap asks no shape question. `main()` collects
+the metadata — interactively via `promptArguments`, or non-interactively from
+`<package-name>` plus the `--author`/`--github-user`/`--license` flags and an optional
+`--description` (`parseArguments`) — then calls `bootstrap(root, options)`. Any other
+option, including one given before the package name, fails with `ERR_ARGUMENT_UNKNOWN`.
 
 `bootstrap()` runs `transform()` twice: once as a dry-run into an in-memory `preview`
 Map (never touching disk), then for real only after the dry-run passes every check
@@ -36,69 +35,31 @@ Map (never touching disk), then for real only after the dry-run passes every che
 - Removes its own five files — `scripts/bootstrap.mjs`, `scripts/verify-bootstrap.mjs`,
   `tests/bootstrap.test.ts`, `tests/verify-bootstrap.test.ts`,
   `tests/template-self.test.ts` — see "The self-removal property" below.
-- Rewrites `PLACEHOLDER_TARGETS` (template package name, repo, author, email,
-  description) and strips `template-only`/`profile:<name>` Markdown and YAML blocks from
-  `MARKER_TARGETS`, keeping only the block for the selected profile.
-- Rewrites `package.json` (name, version, description, license, author, repository,
-  `bugs`, `homepage`, conditionally keeps `bin` for a CLI or removes it otherwise, drops
-  the `bootstrap:e2e` and `bootstrap:check` script entries, sets `sideEffects: false`,
-  and profile-conditionally sets/removes `engines` using the selected `--node-engines`
-  floor), removes `src/cli.ts` when the CLI option is `no`, rewrites
-  `tsconfig.build.json`'s `compilerOptions.types` for the profile, rewrites the
-  generated CI package-floor job's `node-version` to that same floor for `node-library`
-  (dropping its `# bootstrap-node-floor` marker comment in the process — nothing re-adds
-  it, so a generated repository's ci.yml carries a bare `node-version: N`) or removes
-  the whole job for `universal-library`, which declares no floor to verify, and
-  regenerates `LICENSE` and a bare `CHANGELOG.md`.
+- Removes the sample command entry `src/cli.ts` and its test `tests/cli.test.ts`.
+- Rewrites `PLACEHOLDER_TARGETS` (template package name, repo, author, description, the
+  README license link) and strips `template-only` Markdown and YAML blocks from
+  `MARKER_TARGETS`.
+- Rewrites `package.json` (name, version, description, license, author name, repository,
+  `bugs`, `homepage`, no `bin`, `sideEffects: false`) and drops the `bootstrap:e2e` and
+  `bootstrap:check` script entries. `engines` and `tsconfig.build.json` keep the
+  template's own values.
+- Regenerates `LICENSE` and a bare `CHANGELOG.md`.
 
 `scripts/verify-bootstrap.mjs`, run as `pnpm bootstrap:e2e`, is the flow's own
 integration test: `main()` builds a throwaway workspace with `copyTemplate()` (see
-below), runs a real `scripts/bootstrap.mjs` subprocess for `node-library` with and
-without its CLI and for `universal-library` without one, and calls `assertGenerated()`
-against each result — placeholders gone, no bootstrap marker left in `MARKER_TARGETS`,
-the legacy release directory absent, `scripts/bootstrap.mjs` itself gone, a bare
-changelog, and the expected `package.json` shape (name, `0.0.0`, the requested CLI `bin`
-shape, `sideEffects: false`, and, for the published Node floor: when `engines.node` is
-present, that the package-floor CI leg's `node-version` matches it and still runs
-`package:smoke`; when `engines.node` is absent, that the whole `package-floor` job is
-gone from the generated ci.yml).
-
-## Profiles
-
-A profile is one of the two entries in `bootstrap.mjs`'s `PROFILES` set (`node-library`,
-`universal-library`); `DEFAULT_PROFILE` picks the one the interactive prompt defaults
-to. The `--cli` option is a separate yes/no axis, defaulting to `no`: `node-library` may
-keep `src/cli.ts` and `package.json#bin`, while `universal-library --cli yes` is
-rejected at argument-parsing time. `--node-engines` is a bare `>=N` range, defaulting to
-`>=24`; it controls the published `engines.node` and package-floor CI job, while the
-development runtime remains Node 24. A profile changes four things, and only these four:
-which `<!-- profile:<name>:start -->...<!-- profile:<name>:end -->` Markdown/YAML blocks
-survive in `MARKER_TARGETS` (a `# profile:<name>:start`/`:end` pair for YAML,
-`PROFILE_YAML_BLOCK`, applied everywhere `TEMPLATE_ONLY_YAML_BLOCK` is — not gated
-behind the Markdown/instruction-file check `PROFILE_BLOCK` uses),
-`tsconfig.build.json`'s `compilerOptions.types` (and, downstream, whether `node:`
-builtins are allowed in the generated `src/**` — see `writing-typescript`'s
-"Runtime-agnostic source"), whether `package.json#engines` is present, and — because a
-package with no published floor has no floor for the package-floor CI job to verify —
-whether that job exists in the generated ci.yml at all (wrapped in a
-`# profile:node-library:` block). For `node-library`, the range itself comes from
-`--node-engines`.
+below), runs a real `scripts/bootstrap.mjs` subprocess, and calls `assertGenerated()`
+against the result — placeholders gone, no bootstrap marker left in `MARKER_TARGETS`, no
+Skills row naming a missing skill, the legacy release directory absent,
+`scripts/bootstrap.mjs` itself gone, a bare changelog, and the expected `package.json`
+shape (name, `0.0.0`, no `bin`, `sideEffects: false`).
 
 A test that survives bootstrap (i.e. is not in `SELF_REMOVED_PATHS`) must never assert a
 literal that is only true of this checkout before bootstrap runs — the whole point of
 `tests/template-self.test.ts` existing is to be the one place such assertions are
 allowed. A surviving test instead derives its expectation from the file it is reading
-(`package.json#engines`, the profile block a workflow still carries), the way
-`tests/workflows.test.ts`'s package-floor test and `tests/docs.test.ts`'s README-floor
-test do. `pnpm bootstrap:e2e` checks transformations; `pnpm bootstrap:check` also
-installs and runs the generated repositories' full gates, catching tests that retain
-template-only assumptions.
-
-Adding or renaming a profile means: adding it to `PROFILES`, writing its
-`profile:<name>` blocks in every Markdown/YAML file that needs to differ by profile,
-extending the `tsconfig.build.json`/`package.json` branches in `transform()`, and adding
-the profile to `verify-bootstrap.mjs`'s `cases` array so `bootstrap:e2e` actually
-exercises it — a profile with no e2e case is untested by definition.
+(`package.json`, the job a workflow still carries). `pnpm bootstrap:e2e` checks the
+transformation; `pnpm bootstrap:check` also installs and runs the generated repository's
+full gate, catching tests that retain template-only assumptions.
 
 ## The self-removal property
 
@@ -115,11 +76,11 @@ working directory: it includes tracked files and non-ignored new files, so propo
 additions are checked before commit, with no local ignored build output mixed in.
 
 That gap is also the trap: a check that consults the real filesystem can render a
-different verdict against a built checkout (where `dist/` or `docs/api` exist) than
-against a freshly generated tree (where they don't). `namesGeneratedTreeEntry` in
-`scripts/bootstrap.mjs` is the rule that closes this for the dangling-reference check
-specifically — read its doc comment for the exact three-part shape test and the accepted
-residual it documents; this was the actual defect behind issue #106.
+different verdict against a built checkout (where `dist/` exists) than against a freshly
+generated tree (where it doesn't). `namesGeneratedTreeEntry` in `scripts/bootstrap.mjs`
+is the rule that closes this for the dangling-reference check specifically — read its
+doc comment for the exact shape test and the accepted residual it documents; this was
+the actual defect behind issue #106.
 
 This skill itself is part of `SELF_REMOVED_PATHS`, alongside the five files above: a
 generated repository has no bootstrap flow left to run or maintain, so a skill
@@ -149,17 +110,19 @@ removal itself, and, if it changes what AGENTS.md's Skills table can say, this c
 scans every Markdown file in the generated tree for a backticked, repo-relative path
 token and fails if that token names neither a real entry in the generated tree nor an
 entry in `DANGLING_REFERENCE_EXEMPTIONS`. It exists to catch a Markdown reference to a
-file bootstrap itself just removed, or to a profile-only path left dangling for the
-profile that dropped it. Markdown under `docs/product/` and `docs/design/` is skipped
+file bootstrap itself just removed, or to a file a change deleted while a kept skill
+still names it. Markdown under `docs/product/` and `docs/design/` is skipped
 (`MARKDOWN_SCAN_SKIP_PATHS`), because those planning records describe paths later work
 is intended to create.
 
 A change to the template's own Markdown (AGENTS.md, README.md, a skill, ...) that adds a
-backticked path owes this check one of two things: the path must resolve in every
-generated tree the change is meant to apply to, or, if it legitimately never exists in a
-generated tree (gitignored build output, a documented-but-unshipped pattern), it belongs
-in `DANGLING_REFERENCE_EXEMPTIONS` — read that constant's own comment before adding to
-it, since each existing entry documents why it's there.
+backticked path owes this check one of two things: the path must resolve in the
+generated tree, or, if it legitimately never exists in a generated tree (gitignored
+build output, a documented-but-unshipped pattern), it belongs in
+`DANGLING_REFERENCE_EXEMPTIONS` — read that constant's own comment before adding to it,
+since each existing entry documents why it's there. A skill that is only drafted (under
+`docs/design/skill-drafts/`) is named by its bare name, never by a `.agents/skills/`
+path, so the scan has nothing to resolve.
 
 ## How to verify a bootstrap change
 
@@ -172,9 +135,8 @@ paying for a real subprocess run.
 a real, end-to-end run: a change to `copyTemplate`/`assertCopyable`'s file-copying
 behavior, anything that could make the CLI's interactive or non-interactive argument
 path diverge from what the unit tests inject directly, or as a final check before
-believing a profile or removal-list change is actually safe for both profiles. It is
-slower — it runs `scripts/bootstrap.mjs` as a real subprocess against a real temporary
-workspace for both the default Node 24 case and a lower `>=20` package floor — which is
-why it isn't the first thing to reach for. Before finishing a generation change, run
-`pnpm bootstrap:check` to install each generated profile and run its full gate.
-Successful workspaces are removed; failed ones remain at the reported path.
+believing a removal-list change is actually safe. It is slower — it runs
+`scripts/bootstrap.mjs` as a real subprocess against a real temporary workspace — which
+is why it isn't the first thing to reach for. Before finishing a generation change, run
+`pnpm bootstrap:check` to install the generated repository and run its full gate. A
+successful workspace is removed; a failed one remains at the reported path.

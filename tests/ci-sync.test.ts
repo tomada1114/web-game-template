@@ -9,8 +9,8 @@ import { describe, expect, it } from "vitest";
 // separate `run:` steps (split for failure attribution — a reader should see
 // which step failed, not just that the composite did). Nothing asserted the
 // two lists stay in sync, so a step added to one silently stops being
-// enforced by the other. `release.yml` is the only caller of `check:source`
-// as a unit, so a gate added there alone is enforced only at release time.
+// enforced by the other. `pnpm check` runs `check:source` as a unit, so a
+// gate added there alone is enforced locally but never in CI.
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
 /** A script name has no exception here today, but the mechanism stays ready. */
@@ -68,6 +68,23 @@ describe("check:source stays in sync with ci.yml", () => {
 
   it("found at least one step to check", () => {
     expect(steps.length).toBeGreaterThan(0);
+  });
+
+  it("is exactly the source gates, with no packaging or docs step", () => {
+    expect(steps).toEqual([
+      "format:check",
+      "lint",
+      "typecheck",
+      "test:coverage",
+      "build",
+    ]);
+  });
+
+  it("is what pnpm check runs", () => {
+    const manifest = JSON.parse(
+      readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+    ) as { scripts?: Record<string, string> };
+    expect(manifest.scripts?.["check"]).toBe("pnpm run check:source");
   });
 
   it.each(steps)(

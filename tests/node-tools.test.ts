@@ -15,7 +15,7 @@ import {
 // scripts/lib/node-tools.mjs is AGENTS.md's own worked example for the
 // ERR_DEPENDENCY_MISSING error-message convention, so its error paths are
 // exercised directly here rather than only incidentally through the scripts
-// that call it. Real installed dependencies (typescript, prettier, publint)
+// that call it. Real installed dependencies (typescript, prettier, eslint)
 // stand in for fixtures instead of mocking node:fs — the `writing-tests` skill's
 // conventions prefer a real fake to a mock beyond a one-shot call, and these
 // three between them cover every bin shape resolveDependencyBin has to read
@@ -167,9 +167,9 @@ describe("resolveDependencyBin", () => {
   });
 
   it("falls back to the package's own name when binName is omitted", () => {
-    // publint's only bin entry is keyed by its own package name.
-    expect(resolveDependencyBin("publint")).toBe(
-      path.join(repoRoot, "node_modules", "publint", "src", "cli.js"),
+    // eslint's only bin entry is keyed by its own package name.
+    expect(resolveDependencyBin("eslint")).toBe(
+      path.join(repoRoot, "node_modules", "eslint", "bin", "eslint.js"),
     );
   });
 

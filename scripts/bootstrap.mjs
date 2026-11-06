@@ -21,27 +21,18 @@ const TEMPLATE_REPOSITORY = "your-name/my-package";
 const TEMPLATE_AUTHOR = "Your Name";
 const TEMPLATE_EMAIL = "you@example.com";
 const TEMPLATE_DESCRIPTION = "A short description.";
-const DEFAULT_PROFILE = "node-library";
-const DEFAULT_CLI = "no";
-const DEFAULT_NODE_ENGINES = ">=24";
 const DEFAULT_LICENSE = "MIT";
 const DEFAULT_DESCRIPTION = "A TypeScript package.";
-const PROFILES = new Set(["node-library", "universal-library"]);
-const CLI_VALUES = new Set(["yes", "no"]);
 const LICENSES = new Set(["MIT", "ISC"]);
-const NODE_ENGINES_PATTERN = /^>=([1-9]\d*)$/;
-const CI_NODE_FLOOR_LINE = "node-version: 24 # bootstrap-node-floor";
-const README_NODE_FLOOR_LINE = "Requires Node.js 24 or newer.";
 const README_LICENSE_LINK = "[MIT](LICENSE)";
-const README_NODE_FLOOR_MARKER = "\n<!-- bootstrap-node-floor -->\n";
+// TEMPLATE_EMAIL is never asked for: package.json#author is rewritten to the
+// author name alone, and listing it here proves the template address is gone.
 const PLACEHOLDERS = [
   TEMPLATE_PACKAGE,
   TEMPLATE_REPOSITORY,
   TEMPLATE_AUTHOR,
   TEMPLATE_EMAIL,
   TEMPLATE_DESCRIPTION,
-  CI_NODE_FLOOR_LINE,
-  README_NODE_FLOOR_MARKER,
 ];
 const RESERVED_NAMES = new Set(["node_modules", "favicon.ico"]);
 const GENERATED_VERSION = "0.0.0";
@@ -65,18 +56,12 @@ const PLACEHOLDER_TARGETS = [
   { file: "README.md", placeholder: TEMPLATE_PACKAGE },
   { file: "README.md", placeholder: TEMPLATE_AUTHOR },
   { file: "README.md", placeholder: TEMPLATE_DESCRIPTION },
-  { file: ".github/workflows/ci.yml", placeholder: CI_NODE_FLOOR_LINE },
-  { file: "README.md", placeholder: README_NODE_FLOOR_LINE },
-  { file: "README.md", placeholder: README_NODE_FLOOR_MARKER },
   { file: "README.md", placeholder: README_LICENSE_LINK },
   { file: "package.json", placeholder: TEMPLATE_REPOSITORY },
   { file: "package.json", placeholder: TEMPLATE_PACKAGE },
   { file: "package.json", placeholder: TEMPLATE_AUTHOR },
   { file: "package.json", placeholder: TEMPLATE_EMAIL },
   { file: "package.json", placeholder: TEMPLATE_DESCRIPTION },
-  { file: "tests/docs.test.ts", placeholder: TEMPLATE_PACKAGE },
-  { file: "tests/package.test.ts", placeholder: TEMPLATE_PACKAGE },
-  { file: "typedoc.json", placeholder: TEMPLATE_REPOSITORY },
 ];
 
 // These files carry bootstrap-only blocks. They are deliberately enumerated so
@@ -108,7 +93,7 @@ const SELF_REMOVED_PATHS = [
   ".claude/skills/bootstrapping-the-template",
 ];
 
-// The AI-layer assertion retains the profile/reference guard without walking
+// The AI-layer assertion retains the marker/reference guard without walking
 // the repository. Extend this list when a new AI-layer file becomes part of
 // the template.
 const AI_LAYER_TARGETS = [
@@ -122,22 +107,14 @@ const AI_LAYER_TARGETS = [
   ".claude/skills/merge-dependabot/scripts/survey-prs.mjs",
 ];
 
-// Bootstrap-only Markdown markers. `template-only` blocks are removed from
-// every generated repository; a `profile:<name>` block keeps its contents only
-// when the selected profile matches. HTML comments survive Prettier and make
-// the source-to-generated relationship explicit to reviewers.
+// Bootstrap-only markers: a `template-only` block is removed from every
+// generated repository. HTML comments survive Prettier and make the
+// source-to-generated relationship explicit to reviewers; the YAML form is
+// applied to every marker target regardless of file type.
 const TEMPLATE_ONLY_BLOCK =
   /<!-- template-only:start -->[\s\S]*?<!-- template-only:end -->/g;
 const TEMPLATE_ONLY_YAML_BLOCK =
   /^[ \t]*# template-only:start\s*$[\s\S]*?^[ \t]*# template-only:end\s*$\n?/gm;
-const PROFILE_BLOCK =
-  /<!-- profile:([a-z0-9-]+):start -->([\s\S]*?)<!-- profile:\1:end -->/g;
-// The YAML analogue of PROFILE_BLOCK, applied to every marker target
-// regardless of file type (unlike PROFILE_BLOCK, which is Markdown/
-// instruction-file only) — see `.github/workflows/ci.yml`'s `package-floor`
-// job, kept only for `node-library`.
-const PROFILE_YAML_BLOCK =
-  /^[ \t]*# profile:([a-z0-9-]+):start\s*$\n([\s\S]*?)^[ \t]*# profile:\1:end\s*$\n?/gm;
 
 // Lines this template's own AGENTS.md carries only because the
 // `bootstrapping-the-template` skill and the bootstrap tooling it documents
@@ -164,8 +141,6 @@ const MARKDOWN_SCAN_SKIP_DIRECTORIES = new Set([
   "worktrees",
   "coverage",
   ".package",
-  ".smoke",
-  ".attw",
 ]);
 
 // Repository-relative path prefixes whose Markdown is not scanned for
@@ -191,27 +166,26 @@ const MARKDOWN_INLINE_CODE = /`([^`\n]+)`/g;
 const REPO_RELATIVE_PATH_TOKEN = /^[A-Za-z0-9._](?:[A-Za-z0-9._/-]*[A-Za-z0-9_/-])?$/;
 
 // Paths that a Markdown file may legitimately name without the path existing
-// in the generated tree. `dist` and `dist/cli.js` plus `docs/api` are gitignored
-// build output; `src/cli.ts` is an optional source entry removed by the
-// `--cli no` shape;
+// in the generated tree. `dist` and `dist/cli.js` are gitignored build
+// output; `src/cli.ts` and `tests/cli.test.ts` are the sample command entry
+// and its test, which bootstrap removes;
 // `docs` itself has no hand-written page yet, so `git ls-files` — which
 // creates a directory only for a file it copies — never creates it either;
 // `.claude/settings.local.json` is gitignored personal config; `secrets`
 // documents a directory *pattern* this template guards against rather than a
 // directory it ships; and `.claude/settings.json` is named only to say the
 // template does *not* ship one (AGENTS.md's "Security and human approval"),
-// so it never exists in a generated tree either. All six are load-bearing in
+// so it never exists in a generated tree either. All of them are load-bearing in
 // a generated tree: with `namesGeneratedTreeEntry` now classifying a token by
 // shape as well as by what exists on disk (see below), every one of these can
 // be reported as dangling even when its first segment is absent at the root.
 // Entries are stored without a trailing slash; a lookup normalizes the token
-// the same way, so `docs/api` and `docs/api/` are one entry rather than two
+// the same way, so `dist` and `dist/` are one entry rather than two
 // spellings of which only one is covered.
 const DANGLING_REFERENCE_EXEMPTIONS = new Set([
   "dist",
   "dist/cli.js",
   "docs",
-  "docs/api",
   "src/cli.ts",
   "tests/cli.test.ts",
   ".claude/settings.local.json",
@@ -221,7 +195,7 @@ const DANGLING_REFERENCE_EXEMPTIONS = new Set([
 
 /**
  * Strip a single trailing slash, so a directory reference and its bare form
- * (`docs/api/` and `docs/api`) normalize to one spelling before a set lookup.
+ * (`dist/` and `dist`) normalize to one spelling before a set lookup.
  *
  * @param {string} token
  * @returns {string}
@@ -238,15 +212,11 @@ Non-interactive fallback:
   node scripts/bootstrap.mjs <package-name> [options]
 
 Required:
-  --profile <node-library|universal-library>
   --author <name>
-  --email <address>
   --github-user <owner>
   --license <MIT|ISC>
 
 Optional:
-  --cli <yes|no>          Keep the Node CLI entry (default: no)
-  --node-engines <>=N>    Published Node floor (default: >=24)
   --description <text>    Package description
   --dry-run               Validate and show the planned changes only`;
 
@@ -261,26 +231,6 @@ export class BootstrapError extends Error {
     this.name = "BootstrapError";
     this.code = code;
   }
-}
-
-/**
- * Return the major version represented by a supported published Node range.
- *
- * @param {string} nodeEngines
- * @returns {number}
- */
-export function nodeFloor(nodeEngines) {
-  const floor = NODE_ENGINES_PATTERN.exec(nodeEngines)?.[1];
-  const major = floor === undefined ? Number.NaN : Number(floor);
-  if (!Number.isSafeInteger(major) || major < 20) {
-    throw new BootstrapError(
-      "ERR_NODE_ENGINES_INVALID",
-      `unsupported --node-engines value: ${nodeEngines}.\n` +
-        "Expected: a bare range >=N with N at least 20, matching the ES2023 output.\n" +
-        "Next: pass --node-engines '>=20' or a higher floor, then rerun bootstrap.",
-    );
-  }
-  return major;
 }
 
 /**
@@ -364,11 +314,7 @@ export function deriveNames(packageName) {
  * @param {readonly string[]} argv
  * @returns {{
  *   packageName: string,
- *   profile: string,
- *   cli: boolean,
- *   nodeEngines: string,
  *   author: string,
- *   email: string,
  *   githubUser: string,
  *   license: string,
  *   description: string,
@@ -377,12 +323,14 @@ export function deriveNames(packageName) {
  */
 export function parseArguments(argv) {
   const packageName = argv[0] ?? "";
+  // A leading option means the package name was left out; reporting the
+  // option itself names the actual mistake (an option bootstrap no longer
+  // takes, or a misplaced one) instead of "invalid package name".
+  if (packageName.startsWith("--") && packageName !== "--dry-run") {
+    throw new BootstrapError("ERR_ARGUMENT_UNKNOWN", `unknown option: ${packageName}`);
+  }
   const allowedFlags = new Set([
-    "--profile",
-    "--cli",
-    "--node-engines",
     "--author",
-    "--email",
     "--github-user",
     "--license",
     "--description",
@@ -420,42 +368,15 @@ export function parseArguments(argv) {
   }
 
   validatePackageName(packageName);
-  const required = ["--profile", "--author", "--email", "--github-user", "--license"];
+  const required = ["--author", "--github-user", "--license"];
   for (const flag of required) {
     if ((values.get(flag) ?? "").trim() === "") {
       throw new BootstrapError("ERR_ARGUMENT_REQUIRED", `${flag} is required.`);
     }
   }
-  const profile = values.get("--profile") ?? "";
-  if (!PROFILES.has(profile)) {
-    throw new BootstrapError("ERR_PROFILE_INVALID", `unsupported profile: ${profile}`);
-  }
-  const cli = values.get("--cli") ?? DEFAULT_CLI;
-  if (!CLI_VALUES.has(cli)) {
-    throw new BootstrapError(
-      "ERR_CLI_INVALID",
-      `unsupported --cli value: ${cli}.\n` +
-        "Expected: yes or no.\n" +
-        "Next: pass `--cli yes` or `--cli no`, then rerun bootstrap.",
-    );
-  }
-  if (profile === "universal-library" && cli === "yes") {
-    throw new BootstrapError(
-      "ERR_CLI_UNSUPPORTED",
-      "the universal-library profile cannot ship a Node CLI.\n" +
-        "Expected: --cli no for universal-library.\n" +
-        "Next: pass --profile node-library --cli yes, or choose --cli no.",
-    );
-  }
-  const nodeEngines = values.get("--node-engines") ?? DEFAULT_NODE_ENGINES;
-  nodeFloor(nodeEngines);
   const license = values.get("--license") ?? "";
   if (!LICENSES.has(license)) {
     throw new BootstrapError("ERR_LICENSE_INVALID", `unsupported license: ${license}`);
-  }
-  const email = values.get("--email") ?? "";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    throw new BootstrapError("ERR_EMAIL_INVALID", `invalid author email: ${email}`);
   }
   const githubUser = values.get("--github-user") ?? "";
   if (!/^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(githubUser)) {
@@ -467,11 +388,7 @@ export function parseArguments(argv) {
 
   return {
     packageName,
-    profile,
-    cli: cli === "yes",
-    nodeEngines,
     author: values.get("--author") ?? "",
-    email,
     githubUser,
     license,
     description: values.get("--description") ?? DEFAULT_DESCRIPTION,
@@ -487,14 +404,7 @@ export function parseArguments(argv) {
  */
 export async function promptArguments(question) {
   const packageName = (await question("Package name: ")).trim();
-  const profile =
-    (await question(`Profile [${DEFAULT_PROFILE}]: `)).trim() || DEFAULT_PROFILE;
-  const cli = (await question(`CLI [${DEFAULT_CLI}]: `)).trim() || DEFAULT_CLI;
-  const nodeEngines =
-    (await question(`Node engines [${DEFAULT_NODE_ENGINES}]: `)).trim() ||
-    DEFAULT_NODE_ENGINES;
   const author = (await question("Author name: ")).trim();
-  const email = (await question("Author email: ")).trim();
   const githubUser = (await question("GitHub user: ")).trim();
   const license =
     (await question(`License [${DEFAULT_LICENSE}]: `)).trim() || DEFAULT_LICENSE;
@@ -504,16 +414,8 @@ export async function promptArguments(question) {
 
   const argv = [
     packageName,
-    "--profile",
-    profile,
-    "--cli",
-    cli,
-    "--node-engines",
-    nodeEngines,
     "--author",
     author,
-    "--email",
-    email,
     "--github-user",
     githubUser,
     "--license",
@@ -628,11 +530,10 @@ export function removeSelfReferentialLines(text) {
  *
  * @param {string} file
  * @param {readonly [string, string][]} replacements
- * @param {string} profile
  * @param {boolean} write
  * @returns {{changed: boolean, text: string}}
  */
-function replaceText(file, replacements, profile, write) {
+function replaceText(file, replacements, write) {
   const buffer = readFileSync(file);
   if (buffer.includes(0)) {
     return { changed: false, text: buffer.toString("utf8") };
@@ -644,16 +545,8 @@ function replaceText(file, replacements, profile, write) {
   const isMarkdown = file.endsWith(".md");
   const isInstructionFile = ["AGENTS.md", "CLAUDE.md"].includes(path.basename(file));
   let updated = original.replace(TEMPLATE_ONLY_YAML_BLOCK, "");
-  /** @type {(match: string, markedProfile: string, contents: string) => string} */
-  const selectProfileYamlBlock = (_match, markedProfile, contents) =>
-    markedProfile === profile ? contents : "";
-  updated = updated.replace(PROFILE_YAML_BLOCK, selectProfileYamlBlock);
   if (isMarkdown || isInstructionFile) {
     updated = updated.replace(TEMPLATE_ONLY_BLOCK, "");
-    /** @type {(match: string, markedProfile: string, contents: string) => string} */
-    const selectProfileBlock = (_match, markedProfile, contents) =>
-      markedProfile === profile ? contents : "";
-    updated = updated.replace(PROFILE_BLOCK, selectProfileBlock);
     if (path.basename(file) === "AGENTS.md") {
       updated = removeSelfReferentialLines(updated);
     }
@@ -829,10 +722,9 @@ function resolveGeneratedText(root, relative, preview) {
 
 /**
  * Decide whether a path-shaped token is a repository path at all. Shape is
- * checked before the filesystem, because `docs/` and `dist/` are gitignored
- * build output: they exist in a developer checkout that has run
- * `pnpm docs:build` / `pnpm build` and do not exist in a freshly generated
- * tree, so a first-segment-only test (the #102 rule) gives the same token two
+ * checked before the filesystem, because `dist/` is gitignored build output:
+ * it exists in a developer checkout that has run `pnpm build` and does not
+ * exist in a freshly generated tree, so a first-segment-only test (the #102 rule) gives the same token two
  * different verdicts depending on build state. Widening the test to "shape OR
  * first segment" settles that on the strict side — a token that merely looks
  * like a path is treated as one in both environments:
@@ -841,7 +733,7 @@ function resolveGeneratedText(root, relative, preview) {
  *   2. It ends with `/` — an explicit directory reference.
  *   3. Its *last* segment contains a `.` — a filename with an extension.
  *   4. Its *first* segment exists at the generated root — the #102 rule,
- *      kept as the fallback for extensionless tokens such as `docs/api`.
+ *      kept as the fallback for extensionless tokens such as `dist/cli`.
  *
  * An ESLint flat-config block name (`public-api/internal-stays-private`), a
  * Vitest project name, and any other `namespace/identifier` have exactly the
@@ -921,15 +813,14 @@ function findDanglingReferences(root, preview) {
 }
 
 /**
- * Verify that generated instructions do not describe template-only or
- * profile-incompatible paths, and that no Markdown file in the generated
- * tree references a path that tree does not actually contain.
+ * Verify that generated instructions keep no bootstrap marker, and that no
+ * Markdown file in the generated tree references a path that tree does not
+ * actually contain.
  *
  * @param {string} root
- * @param {string} profile
  * @param {Map<string, string | null>} [preview]
  */
-function assertGeneratedAiLayer(root, profile, preview) {
+function assertGeneratedAiLayer(root, preview) {
   /** @type {string[]} */
   const problems = [];
   for (const relative of AI_LAYER_TARGETS) {
@@ -959,8 +850,8 @@ function assertGeneratedAiLayer(root, profile, preview) {
   if (problems.length > 0) {
     throw new BootstrapError(
       "ERR_AI_LAYER_REFERENCE",
-      `generated AI-native instructions are inconsistent for profile ${profile}.\n` +
-        "Expected: no removed or profile-incompatible references, and all skill dependencies present.\n" +
+      "generated AI-native instructions are inconsistent.\n" +
+        "Expected: no bootstrap marker or removed reference, and all skill dependencies present.\n" +
         `Actual:\n${problems.join("\n")}\n` +
         "Next: update the marked source instructions, then rerun bootstrap.",
     );
@@ -1013,12 +904,11 @@ PERFORMANCE OF THIS SOFTWARE.
  *
  * @param {string} root
  * @param {Map<string, string>} replacements
- * @param {string} profile
  * @param {boolean} write
  * @param {Map<string, string | null>} [preview]
  * @returns {string[]}
  */
-function replaceTargets(root, replacements, profile, write, preview) {
+function replaceTargets(root, replacements, write, preview) {
   /** @type {Map<string, [string, string][]>} */
   const byFile = new Map();
   for (const { file: relative, placeholder } of PLACEHOLDER_TARGETS) {
@@ -1048,7 +938,7 @@ function replaceTargets(root, replacements, profile, write, preview) {
     if (!existsSync(file)) {
       continue;
     }
-    const result = replaceText(file, fileReplacements, profile, write);
+    const result = replaceText(file, fileReplacements, write);
     if (preview !== undefined) {
       preview.set(relative, result.text);
     }
@@ -1060,7 +950,7 @@ function replaceTargets(root, replacements, profile, write, preview) {
 }
 
 /**
- * Apply profile and metadata changes directly to the supplied repository.
+ * Apply the metadata changes directly to the supplied repository.
  *
  * @param {string} root
  * @param {ReturnType<typeof parseArguments>} options
@@ -1076,16 +966,7 @@ function transform(root, options, year, preview) {
     [TEMPLATE_REPOSITORY, repository],
     [TEMPLATE_PACKAGE, options.packageName],
     [TEMPLATE_AUTHOR, options.author],
-    [TEMPLATE_EMAIL, options.email],
     [TEMPLATE_DESCRIPTION, options.description],
-    [CI_NODE_FLOOR_LINE, `node-version: ${String(nodeFloor(options.nodeEngines))}`],
-    [
-      README_NODE_FLOOR_LINE,
-      options.profile === "universal-library"
-        ? "The package does not declare a Node.js floor."
-        : `Requires Node.js ${String(nodeFloor(options.nodeEngines))} or newer.`,
-    ],
-    [README_NODE_FLOOR_MARKER, "\n"],
     [README_LICENSE_LINK, `[${options.license}](LICENSE)`],
   ]);
   /** @type {string[]} */
@@ -1115,8 +996,10 @@ function transform(root, options, year, preview) {
     changed.push(`${relative} (removed)`);
   }
 
+  // The sample command entry and its test are not part of a generated
+  // repository.
   const cliEntry = path.join(root, "src", "cli.ts");
-  if (!options.cli && existsSync(cliEntry)) {
+  if (existsSync(cliEntry)) {
     if (preview !== undefined) {
       preview.set("src/cli.ts", null);
     }
@@ -1127,7 +1010,7 @@ function transform(root, options, year, preview) {
   }
 
   const cliTest = path.join(root, "tests", "cli.test.ts");
-  if (!options.cli && existsSync(cliTest)) {
+  if (existsSync(cliTest)) {
     if (preview !== undefined) {
       preview.set("tests/cli.test.ts", null);
     }
@@ -1137,7 +1020,7 @@ function transform(root, options, year, preview) {
     changed.push("tests/cli.test.ts (removed)");
   }
 
-  changed.push(...replaceTargets(root, replacements, options.profile, write, preview));
+  changed.push(...replaceTargets(root, replacements, write, preview));
 
   const manifestPath = path.join(root, "package.json");
   const manifest = readObject(manifestPath);
@@ -1145,7 +1028,7 @@ function transform(root, options, year, preview) {
   manifest["version"] = GENERATED_VERSION;
   manifest["description"] = options.description;
   manifest["license"] = options.license;
-  manifest["author"] = `${options.author} <${options.email}>`;
+  manifest["author"] = options.author;
   manifest["repository"] = {
     type: "git",
     url: `git+https://github.com/${repository}.git`,
@@ -1157,20 +1040,8 @@ function transform(root, options, year, preview) {
     delete (/** @type {Record<string, unknown>} */ (scripts)["bootstrap:e2e"]);
     delete (/** @type {Record<string, unknown>} */ (scripts)["bootstrap:check"]);
   }
-  if (options.cli) {
-    // npm exposes a bin object's key as the command name, so the key has to be
-    // the name the consumer types. A scoped package's command is its unscoped
-    // half, which is what `npx <name>` resolves to.
-    manifest["bin"] = { [names.unscoped]: "./dist/cli.js" };
-  } else {
-    delete manifest["bin"];
-  }
+  delete manifest["bin"];
   manifest["sideEffects"] = false;
-  if (options.profile === "universal-library") {
-    delete manifest["engines"];
-  } else {
-    manifest["engines"] = { node: options.nodeEngines };
-  }
   if (write) {
     writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   }
@@ -1178,21 +1049,6 @@ function transform(root, options, year, preview) {
     preview.set("package.json", `${JSON.stringify(manifest, null, 2)}\n`);
   }
   changed.push("package.json");
-
-  const buildConfigPath = path.join(root, "tsconfig.build.json");
-  let buildConfig = readFileSync(buildConfigPath, "utf8");
-  if (options.profile === "universal-library") {
-    buildConfig = buildConfig
-      .replace('"types": ["node"]', '"types": []')
-      .replace('"lib": ["ES2023"]', '"lib": ["ES2023", "DOM", "DOM.Iterable"]');
-  }
-  if (write) {
-    writeFileSync(buildConfigPath, buildConfig);
-  }
-  if (preview !== undefined) {
-    preview.set("tsconfig.build.json", buildConfig);
-  }
-  changed.push("tsconfig.build.json");
 
   if (options.license === "ISC") {
     if (write) {
@@ -1333,7 +1189,7 @@ export function bootstrap(
       `generated repository still contains placeholders:\n${placeholders.join("\n")}`,
     );
   }
-  assertGeneratedAiLayer(root, options.profile, preview);
+  assertGeneratedAiLayer(root, preview);
 
   if (options.dryRun) {
     return changed;
@@ -1395,7 +1251,7 @@ export async function main(argv) {
     console.log(
       options.dryRun
         ? `Dry run: ${String(changed.length)} path(s) would change.`
-        : `Bootstrapped ${options.packageName} as ${options.profile}.`,
+        : `Bootstrapped ${options.packageName}.`,
     );
     for (const file of changed) {
       console.log(`- ${file}`);

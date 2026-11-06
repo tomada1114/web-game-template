@@ -66,10 +66,6 @@ if (isMain(import.meta.url)) {
 }
 ```
 
-The portable guard also supports artifact-consumption scripts run on a generated
-package's published Node floor. Check every caller before replacing it with a newer Node
-API.
-
 ## Spawning `git`
 
 Git exports `GIT_DIR` to every hook it runs, and `git commit -- <path>` also exports a
