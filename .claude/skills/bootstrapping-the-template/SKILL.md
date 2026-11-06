@@ -23,10 +23,17 @@ lives or its coverage floor (`placing-tests`).
 
 `scripts/bootstrap.mjs` turns a fresh clone of this template into a real repository,
 once. The template has one shape, so bootstrap asks no shape question. `main()` collects
-the metadata — interactively via `promptArguments`, or non-interactively from
-`<package-name>` plus the `--author`/`--github-user`/`--license` flags and an optional
+the metadata — interactively via `promptArguments`, or non-interactively from `<slug>`
+plus the `--title`/`--author`/`--github-user`/`--license` flags and an optional
 `--description` (`parseArguments`) — then calls `bootstrap(root, options)`. Any other
-option, including one given before the package name, fails with `ERR_ARGUMENT_UNKNOWN`.
+option, including one given before the slug, fails with `ERR_ARGUMENT_UNKNOWN`.
+
+The slug is lowercase kebab case, never scoped: it names the root package and scopes the
+workspace packages (`@<slug>/core`, `@<slug>/web`). It and the display title are capped
+so that `GAME_SLUG` and `GAME_TITLE` in `apps/web/src/game-info.ts` stay on one line at
+Prettier's print width, and the title refuses a double quote, a backslash, and control
+characters — the characters a TypeScript literal would need escaped in a form Prettier
+rewrites. An `&`, `<` or `>` is escaped for `apps/web/index.html` instead.
 
 `bootstrap()` runs `transform()` twice: once as a dry-run into an in-memory `preview`
 Map (never touching disk), then for real only after the dry-run passes every check
@@ -35,13 +42,17 @@ Map (never touching disk), then for real only after the dry-run passes every che
 - Removes its own five files — `scripts/bootstrap.mjs`, `scripts/verify-bootstrap.mjs`,
   `tests/bootstrap.test.ts`, `tests/verify-bootstrap.test.ts`,
   `tests/template-self.test.ts` — see "The self-removal property" below.
-- Removes the sample command entry `src/cli.ts` and its test `tests/cli.test.ts`.
-- Rewrites `PLACEHOLDER_TARGETS` (template package name, repo, author, description, the
-  README license link) and strips `template-only` Markdown and YAML blocks from
-  `MARKER_TARGETS`.
+- Rewrites `PLACEHOLDER_TARGETS` (the `my-game` slug, the `My Game` title, repo, author,
+  description, the README license link) and strips `template-only` Markdown and YAML
+  blocks from `MARKER_TARGETS`. The slug lands in `packages/core/package.json`,
+  `apps/web/package.json`, `apps/web/src/game-info.ts` and `pnpm-lock.yaml`, whose
+  `apps/web` importer records the core dependency by name — without that rename the
+  generated repository's `pnpm install --frozen-lockfile` fails. The title lands in
+  `apps/web/src/game-info.ts` and `apps/web/index.html`. A module that imports a
+  workspace package by its `@my-game/` name is a target too, and has to be listed.
 - Rewrites `package.json` (name, version, description, license, author name, repository,
   `bugs`, `homepage`, no `bin`, `sideEffects: false`) and drops the `bootstrap:e2e` and
-  `bootstrap:check` script entries. `engines` and `tsconfig.build.json` keep the
+  `bootstrap:check` script entries. `engines` and the workspace tsconfigs keep the
   template's own values.
 - Regenerates `LICENSE` and a bare `CHANGELOG.md`.
 
@@ -50,8 +61,9 @@ integration test: `main()` builds a throwaway workspace with `copyTemplate()` (s
 below), runs a real `scripts/bootstrap.mjs` subprocess, and calls `assertGenerated()`
 against the result — placeholders gone, no bootstrap marker left in `MARKER_TARGETS`, no
 Skills row naming a missing skill, the legacy release directory absent,
-`scripts/bootstrap.mjs` itself gone, a bare changelog, and the expected `package.json`
-shape (name, `0.0.0`, no `bin`, `sideEffects: false`).
+`scripts/bootstrap.mjs` itself gone, a bare changelog, the expected `package.json` shape
+(name, `0.0.0`, no `bin`, `sideEffects: false`), and the slug and title present in every
+workspace file that carries them (`ERR_WORKSPACE_NAME`, `ERR_GAME_RENAME_MISSING`).
 
 A test that survives bootstrap (i.e. is not in `SELF_REMOVED_PATHS`) must never assert a
 literal that is only true of this checkout before bootstrap runs — the whole point of

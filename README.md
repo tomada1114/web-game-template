@@ -1,13 +1,13 @@
-# my-package
+# my-game
 
-[![CI](https://github.com/your-name/my-package/actions/workflows/ci.yml/badge.svg)](https://github.com/your-name/my-package/actions/workflows/ci.yml)
+[![CI](https://github.com/your-name/my-game/actions/workflows/ci.yml/badge.svg)](https://github.com/your-name/my-game/actions/workflows/ci.yml)
 
 A short description.
 
 ## Install
 
 ```sh
-pnpm add my-package
+pnpm add my-game
 ```
 
 Requires Node.js 24 or newer. The package ships ESM only. CommonJS consumers need a
@@ -16,7 +16,7 @@ Node.js version with unflagged `require(esm)` support (20.19+, 22.12+, or 24+).
 ## Quick start
 
 ```ts
-import { normalizeIdentifier } from "my-package";
+import { normalizeIdentifier } from "my-game";
 
 console.log(normalizeIdentifier("Hello World"));
 // => "hello-world"
@@ -43,10 +43,11 @@ bootstrap before installing dependencies:
 node scripts/bootstrap.mjs
 ```
 
-Answer the prompts for the package name, author, GitHub user, license, and description.
-For automation, pass the package name together with the `--author`, `--github-user`, and
-`--license` flags. Use `--dry-run` to preview changes and `--help` for the complete
-command syntax. Bootstrap removes this section from the generated repository.
+Answer the prompts for the game slug, display title, author, GitHub user, license, and
+description. For automation, pass the slug together with the `--title`, `--author`,
+`--github-user`, and `--license` flags. Use `--dry-run` to preview changes and `--help`
+for the complete command syntax. Bootstrap removes this section from the generated
+repository.
 <!-- template-only:end -->
 
 ## Development
