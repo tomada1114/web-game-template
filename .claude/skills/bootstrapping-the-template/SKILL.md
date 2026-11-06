@@ -150,7 +150,9 @@ scans every Markdown file in the generated tree for a backticked, repo-relative 
 token and fails if that token names neither a real entry in the generated tree nor an
 entry in `DANGLING_REFERENCE_EXEMPTIONS`. It exists to catch a Markdown reference to a
 file bootstrap itself just removed, or to a profile-only path left dangling for the
-profile that dropped it.
+profile that dropped it. Markdown under `docs/product/` and `docs/design/` is skipped
+(`MARKDOWN_SCAN_SKIP_PATHS`), because those planning records describe paths later work
+is intended to create.
 
 A change to the template's own Markdown (AGENTS.md, README.md, a skill, ...) that adds a
 backticked path owes this check one of two things: the path must resolve in every

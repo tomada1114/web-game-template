@@ -967,6 +967,41 @@ describe("bootstrap profiles", () => {
     ).not.toThrow();
   });
 
+  it.each(["docs/product", "docs/design"])(
+    "does not scan planning records under %s/ for dangling Markdown references",
+    (directory) => {
+      const root = copyTemplate();
+      const planningDirectory = path.join(root, ...directory.split("/"));
+      mkdirSync(planningDirectory, { recursive: true });
+      writeFileSync(
+        path.join(planningDirectory, "plan.md"),
+        "Later work creates `src/not-yet-created.ts`.\n",
+      );
+
+      expect(() =>
+        bootstrap(root, options("planning-record-skip", "node-library")),
+      ).not.toThrow();
+    },
+  );
+
+  it.each(["docs/notes.md", "README.md"])(
+    "still reports a dangling reference in %s outside the planning-record paths",
+    (file) => {
+      const root = copyTemplate();
+      const target = path.join(root, ...file.split("/"));
+      mkdirSync(path.dirname(target), { recursive: true });
+      const before = existsSync(target) ? readFileSync(target, "utf8") : "";
+      writeFileSync(
+        target,
+        `${before}\nLater work creates \`src/not-yet-created.ts\`.\n`,
+      );
+
+      expect(() =>
+        bootstrap(root, options("planning-record-scanned", "node-library")),
+      ).toThrow(/dangling reference `src\/not-yet-created\.ts`/);
+    },
+  );
+
   it("does not let a nested, unrelated file sharing an AI-layer basename affect the AI-layer check", () => {
     // AI_LAYER_TARGETS matches exact repository-relative paths, not a
     // basename at any depth (fixed in #71). A stray bootstrap marker in a

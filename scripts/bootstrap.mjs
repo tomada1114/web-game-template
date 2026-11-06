@@ -168,6 +168,12 @@ const MARKDOWN_SCAN_SKIP_DIRECTORIES = new Set([
   ".attw",
 ]);
 
+// Repository-relative path prefixes whose Markdown is not scanned for
+// dangling references: these planning records describe paths that later work
+// is intended to create, so a reference that does not exist yet is expected.
+// Matched on the normalized relative path, never on a directory name.
+const MARKDOWN_SCAN_SKIP_PATHS = ["docs/product/", "docs/design/"];
+
 // A fenced code block, stripped before scanning for inline code spans so a
 // single backtick pair used inside example prose (e.g. a shell command
 // demonstrating backtick substitution) is never mistaken for a path
@@ -707,7 +713,11 @@ function listMarkdownFiles(root) {
         }
         visit(absolute);
       } else if (entry.isFile() && entry.name.endsWith(".md")) {
-        found.push(normalizeRelativePath(path.relative(root, absolute)));
+        const relative = normalizeRelativePath(path.relative(root, absolute));
+        if (MARKDOWN_SCAN_SKIP_PATHS.some((prefix) => relative.startsWith(prefix))) {
+          continue;
+        }
+        found.push(relative);
       }
     }
   };
