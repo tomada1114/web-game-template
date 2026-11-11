@@ -72,10 +72,17 @@ tests/             # repository-level tests
 
 ## Security and human approval
 
-- **Commit, push, pull request, and publish always need a human.** Nothing in this
-  repository blocks `--no-verify`, `LEFTHOOK=0`, a force-push, a release tag, or a
-  portal upload mechanically; this instruction is the rule. Reaching for a bypass is
-  what is ruled out, not one spelling of it.
+- **Inside a task a human explicitly authorized, commits, branch pushes, and pull
+  requests need no separate request.** An explicit `shipping-issues` request is such a
+  task. Merging is covered only by an explicit request that names it, as a request to
+  ship an issue does; a request for a pull request stops there. Outside such a task,
+  each of them still needs a human.
+- **A release tag, a portal upload, a new dependency, the branch ruleset, and the
+  repository's security settings stay the owner's.** Prepare the concrete proposal, then
+  ask.
+- Nothing in this repository blocks `--no-verify`, `LEFTHOOK=0`, a force-push, a release
+  tag, or a portal upload mechanically; this instruction is the rule. Reaching for a
+  bypass is what is ruled out, not one spelling of it.
 - Never read or write `.env*` (the `.example`, `.sample` and `.template` variants are
   fine) or anything under `secrets/`, and never write a credential into a tracked file.
   The pre-commit hook inspects only what is staged, so a shell read is not caught.
@@ -104,4 +111,5 @@ tests/             # repository-level tests
   something observable moved, the `README.md` example and the affected `docs/` page
   change in the same pull request; otherwise say that no documentation change is needed.
 - Sub-agent tiers are named by role (`executor`, `architect`, `scout`, `worker`; defined
-  in `.claude/agents/`), never by model name or effort.
+  in `.claude/agents/`), never by model name or effort. Hand a step to a tier with
+  `subagent_type`, never a bare `model`, whose effort would come from the session.

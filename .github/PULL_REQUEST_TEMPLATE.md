@@ -16,6 +16,10 @@ Rules version: unchanged
 
 Rules version: bumped to <n>
 
+## Test Plan
+
+<!-- The commands you ran, each with its result. For a behavior you observed rather than asserted, paste the lines that show it, not the whole log. -->
+
 ## Checklist
 
 - [ ] `pnpm check` passes
