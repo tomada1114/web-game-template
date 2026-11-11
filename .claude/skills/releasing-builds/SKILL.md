@@ -16,7 +16,7 @@ consequences, the game's version and `CHANGELOG.md`, and how a release is cut. *
 not own:** whether a change alters game results — the golden tests and `RULES_VERSION`
 (`writing-game-core`); what the zip contains and how it is checked
 (`integrating-portals`); editing the workflow file itself (`changing-gates`); the
-approval that commit, push, and tag push need (`AGENTS.md`).
+approval that commit, push, and tag push need (`CLAUDE.md`).
 
 A game is not a package: a release is a zip attached to a GitHub Release and uploaded to
 a portal by hand. Nothing is published to npm.
@@ -70,7 +70,7 @@ does. A missing line is an incomplete PR, not a "none" — ask for it before app
    `## [Unreleased]` into a new `## [X.Y.Z] - YYYY-MM-DD` section, and leave
    `## [Unreleased]` in place, empty. Its body says `Release: needed — release X.Y.Z`.
 2. After it merges, tag the merge commit `vX.Y.Z` and push the tag. Pushing is a human
-   step (`AGENTS.md`).
+   step (`CLAUDE.md`).
 3. `.github/workflows/release.yml` runs on the `v*.*.*` tag: a frozen-lockfile install,
    then `pnpm check` once — which already produces the zip through `package:crazygames`
    — then `gh release create "$TAG" .package/*.zip --generate-notes`, with no second

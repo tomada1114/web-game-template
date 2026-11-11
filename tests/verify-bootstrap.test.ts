@@ -455,7 +455,7 @@ describe("assertGenerated", () => {
   it.each([
     "CHANGELOG.md",
     "docs/product/requirements.md",
-    "docs/design/skill-drafts/x.md",
+    "docs/design/x.md",
     "node_modules/pkg/index.js",
     "dist/assets/index.js",
   ])("ignores the template name in %s", (relative) => {

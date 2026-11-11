@@ -39,8 +39,8 @@ Do these in order. Each step leaves the repository in a state the next one assum
    repository as generated and stays committed), leaves `CLAUDE.md`'s `## Product` as
    exactly these placeholder lines (the template carries them), and removes itself and
    its tests. Because it removes its own script, the refusal guards only a rerun of a
-   copy of `scripts/bootstrap.mjs` brought back: while `.template-origin` exists that
-   run fails with `ERR_ALREADY_BOOTSTRAPPED` and changes nothing.
+   copy of the bootstrap script brought back: while `.template-origin` exists that run
+   fails with `ERR_ALREADY_BOOTSTRAPPED` and changes nothing.
 
    ```
    TODO: What this game is, in one paragraph.
