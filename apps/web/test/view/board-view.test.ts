@@ -8,6 +8,7 @@ import {
   cellCenter,
   channels,
   focusRect,
+  isActivation,
   moveCursor,
   moveFocus,
   resultLines,
@@ -171,5 +172,18 @@ describe("channels", () => {
     expect(channels(colors.bg.hex)).toEqual([0x15, 0x17, 0x1c]);
     expect(channels(0xffffff)).toEqual([255, 255, 255]);
     expect(channels(0)).toEqual([0, 0, 0]);
+  });
+});
+
+describe("isActivation", () => {
+  it("accepts a first Enter or Space press", () => {
+    expect(isActivation({ key: "Enter", repeat: false })).toBe(true);
+    expect(isActivation({ key: " ", repeat: false })).toBe(true);
+  });
+
+  it("ignores auto-repeat and other keys", () => {
+    expect(isActivation({ key: "Enter", repeat: true })).toBe(false);
+    expect(isActivation({ key: " ", repeat: true })).toBe(false);
+    expect(isActivation({ key: "ArrowUp", repeat: false })).toBe(false);
   });
 });

@@ -3,10 +3,11 @@ import * as Phaser from "phaser";
 import { GAME_TITLE } from "../game-info.js";
 import { type Platform } from "../platform/platform.js";
 import { colors, layout, radius, type } from "../theme/tokens.js";
-import { moveFocus } from "../view/board-view.js";
+import { isActivation, moveFocus } from "../view/board-view.js";
 
 import { SceneKey, practiceSeed, type PlayData } from "./keys.js";
 import {
+  CAPTURED_KEYS,
   FocusRing,
   addButton,
   addPanel,
@@ -64,7 +65,12 @@ export class TitleScene extends Phaser.Scene {
       if (button)
         ring.show(button.x, button.y, button.width, button.height, radius.button);
     };
+    this.input.keyboard?.addCapture(CAPTURED_KEYS);
     this.input.keyboard?.on("keydown", (event: KeyboardEvent) => {
+      if (isActivation(event)) {
+        buttons[focused]?.activate();
+        return;
+      }
       switch (event.key) {
         case "ArrowUp":
           focus(moveFocus(focused, -1, buttons.length));
@@ -74,7 +80,6 @@ export class TitleScene extends Phaser.Scene {
           break;
         case "Enter":
         case " ":
-          buttons[focused]?.activate();
           break;
         default:
           focus(focused);
@@ -91,6 +96,7 @@ export class TitleScene extends Phaser.Scene {
   private leave(data: PlayData): void {
     if (this.leaving) return;
     this.leaving = true;
+    delete document.body.dataset["ready"];
     fadeTo(this, SceneKey.play, data);
   }
 }

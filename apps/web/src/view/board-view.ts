@@ -152,3 +152,11 @@ export function focusRect(
 export function channels(hex: number): readonly [number, number, number] {
   return [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255];
 }
+
+/** Enter and Space activate a control; their auto-repeat does not activate again. */
+export function isActivation(event: {
+  readonly key: string;
+  readonly repeat: boolean;
+}): boolean {
+  return (event.key === "Enter" || event.key === " ") && !event.repeat;
+}

@@ -56,12 +56,33 @@ export function addButton(
     type.body,
     primary ? colors.onAccent.css : colors.text.css,
   );
-  scene.add
-    .zone(x, y, w, h)
-    .setInteractive({ useHandCursor: true })
-    .on(Phaser.Input.Events.POINTER_UP, activate);
+  onTap(scene.add.zone(x, y, w, h), activate);
   return { x, y, width: w, height: h, activate };
 }
+
+/**
+ * Makes `zone` interactive and calls `activate` on a release only when the press
+ * also started on it, so a drag that ends over the zone does not activate it.
+ */
+export function onTap(zone: Phaser.GameObjects.Zone, activate: () => void): void {
+  let pressed = false;
+  zone
+    .setInteractive({ useHandCursor: true })
+    .on(Phaser.Input.Events.POINTER_DOWN, () => {
+      pressed = true;
+    })
+    .on(Phaser.Input.Events.POINTER_OUT, () => {
+      pressed = false;
+    })
+    .on(Phaser.Input.Events.POINTER_UP, () => {
+      if (!pressed) return;
+      pressed = false;
+      activate();
+    });
+}
+
+/** Keys the scenes use that would otherwise scroll a host page around an iframe. */
+export const CAPTURED_KEYS = "UP,DOWN,LEFT,RIGHT,SPACE";
 
 /** Draws a `surface` panel that holds the board or a group of buttons. */
 export function addPanel(

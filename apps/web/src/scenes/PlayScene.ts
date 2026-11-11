@@ -14,6 +14,8 @@ import { colors, layout, motion, radius, space, type } from "../theme/tokens.js"
 import {
   CURSOR_START,
   boardRect,
+  cellCenter,
+  isActivation,
   moveCursor,
   resultLines,
   toView,
@@ -21,7 +23,17 @@ import {
 } from "../view/board-view.js";
 
 import { SceneKey, type PlayData, type ResultData } from "./keys.js";
-import { FocusRing, addButton, addPanel, addText, fadeIn, fadeTo } from "./ui.js";
+import {
+  CAPTURED_KEYS,
+  FocusRing,
+  addButton,
+  addPanel,
+  addText,
+  fadeIn,
+  fadeTo,
+  onTap,
+  textStyle,
+} from "./ui.js";
 
 interface Tile {
   readonly body: Phaser.GameObjects.Graphics;
@@ -44,6 +56,7 @@ export class PlayScene extends Phaser.Scene {
   private cursor = CURSOR_START;
   private counter!: Phaser.GameObjects.Text;
   private ring!: FocusRing;
+  private mirror: HTMLElement | null = null;
   private leaving = false;
 
   private readonly platform: Platform;
@@ -76,11 +89,7 @@ export class PlayScene extends Phaser.Scene {
       },
     );
     this.counter = this.add
-      .text(layout.designWidth - space.unit * 4, top, "", {
-        fontFamily: type.font,
-        fontSize: `${String(type.body)}px`,
-        color: colors.text.css,
-      })
+      .text(layout.designWidth - space.unit * 4, top, "", textStyle(type.body))
       .setOrigin(1, 0.5);
     addText(
       this,
@@ -95,44 +104,37 @@ export class PlayScene extends Phaser.Scene {
     for (const cell of toView(this.state).cells) {
       const body = this.add.graphics({ x: cell.x, y: cell.y });
       const glyph = this.add
-        .text(cell.x, cell.y, "", {
-          fontFamily: type.font,
-          fontSize: `${String(type.heading)}px`,
-          color: colors.glyphOnTile.css,
-        })
+        .text(cell.x, cell.y, "", textStyle(type.heading, colors.glyphOnTile.css))
         .setOrigin(0.5);
-      this.add
-        .zone(cell.x, cell.y, layout.tileSize, layout.tileSize)
-        .setInteractive({ useHandCursor: true })
-        .on(Phaser.Input.Events.POINTER_UP, () => {
-          this.cursor = cell.cell;
-          this.play(cell.cell);
-        });
+      onTap(this.add.zone(cell.x, cell.y, layout.tileSize, layout.tileSize), () => {
+        this.cursor = cell.cell;
+        this.play(cell.cell);
+      });
       this.tiles.push({ body, glyph });
     }
     this.ring = new FocusRing(this);
+    this.mirror = document.getElementById("debug-moves");
+    this.input.keyboard?.addCapture(CAPTURED_KEYS);
     this.input.keyboard?.on("keydown", (event: KeyboardEvent) => {
-      this.onKey(event.key);
+      this.onKey(event);
     });
 
     this.draw();
     this.platform.gameplayStart();
   }
 
-  private onKey(key: string): void {
-    const direction = ARROWS[key];
+  private onKey(event: KeyboardEvent): void {
+    const direction = ARROWS[event.key];
     if (direction !== undefined) {
       this.cursor = moveCursor(this.cursor, direction);
-    } else if (key === "Enter" || key === " ") {
+    } else if (isActivation(event)) {
       this.play(this.cursor);
-    } else if (key === "Escape") {
+    } else if (event.key === "Escape") {
       this.back();
       return;
     }
-    const view = toView(this.state).cells[this.cursor];
-    if (view) {
-      this.ring.show(view.x, view.y, layout.tileSize, layout.tileSize, radius.tile);
-    }
+    const center = cellCenter(this.cursor);
+    this.ring.show(center.x, center.y, layout.tileSize, layout.tileSize, radius.tile);
   }
 
   /** Pointer and keyboard both land here, so the two cannot disagree about a move. */
@@ -146,8 +148,11 @@ export class PlayScene extends Phaser.Scene {
     this.state.cells.forEach((kind, index) => {
       const tile = this.tiles[index];
       if (tile && kind !== before[index]) {
+        const targets = [tile.body, tile.glyph];
+        this.tweens.killTweensOf(targets);
+        for (const target of targets) target.setScale(1);
         this.tweens.add({
-          targets: [tile.body, tile.glyph],
+          targets,
           scale: layout.movePopScale,
           duration: motion.moveMs / 2,
           ease: motion.moveEase,
@@ -176,8 +181,7 @@ export class PlayScene extends Phaser.Scene {
       tile.glyph.setText(cell.glyph);
     });
     this.counter.setText(view.movesLabel);
-    const mirror = document.getElementById("debug-moves");
-    if (mirror) mirror.textContent = String(view.movesUsed);
+    if (this.mirror) this.mirror.textContent = String(view.movesUsed);
     const focused = view.cells[this.cursor];
     if (focused) {
       this.ring.moveTo(

@@ -1,10 +1,11 @@
 import * as Phaser from "phaser";
 
 import { layout, radius, space, type } from "../theme/tokens.js";
-import { moveFocus } from "../view/board-view.js";
+import { isActivation, moveFocus } from "../view/board-view.js";
 
 import { SceneKey, practiceSeed, type PlayData, type ResultData } from "./keys.js";
 import {
+  CAPTURED_KEYS,
   FocusRing,
   addButton,
   addPanel,
@@ -55,7 +56,12 @@ export class ResultScene extends Phaser.Scene {
       if (button)
         ring.show(button.x, button.y, button.width, button.height, radius.button);
     };
+    this.input.keyboard?.addCapture(CAPTURED_KEYS);
     this.input.keyboard?.on("keydown", (event: KeyboardEvent) => {
+      if (isActivation(event)) {
+        buttons[focused]?.activate();
+        return;
+      }
       switch (event.key) {
         case "ArrowLeft":
         case "ArrowUp":
@@ -67,7 +73,6 @@ export class ResultScene extends Phaser.Scene {
           break;
         case "Enter":
         case " ":
-          buttons[focused]?.activate();
           break;
         default:
           focus(focused);
