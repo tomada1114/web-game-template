@@ -64,6 +64,9 @@ Release pull requests update this file as part of the reviewed release process.
 // new generated file intentionally contains one of the template placeholders
 // — including a module that imports a workspace package by its
 // `@my-game/` name, which a generated repository renames.
+// Such a module imports it as `import * as core from "@my-game/core";`:
+// Prettier never wraps that line, while a named-import list that fits on one
+// line for `my-game` wraps for a longer slug and fails format:check.
 // `pnpm-lock.yaml` records each workspace dependency under its package name,
 // so a frozen install in the generated repository fails unless it is renamed
 // along with the manifests.
@@ -74,6 +77,9 @@ const PLACEHOLDER_TARGETS = [
   { file: "apps/web/package.json", placeholder: TEMPLATE_PACKAGE },
   { file: "apps/web/src/game-info.ts", placeholder: TEMPLATE_PACKAGE },
   { file: "apps/web/src/game-info.ts", placeholder: TEMPLATE_TITLE },
+  { file: "apps/web/src/scenes/PlayScene.ts", placeholder: TEMPLATE_PACKAGE },
+  { file: "apps/web/src/view/board-view.ts", placeholder: TEMPLATE_PACKAGE },
+  { file: "apps/web/test/view/board-view.test.ts", placeholder: TEMPLATE_PACKAGE },
   { file: "apps/web/index.html", placeholder: TEMPLATE_TITLE, encode: escapeHtml },
   { file: "pnpm-lock.yaml", placeholder: TEMPLATE_PACKAGE },
   { file: "LICENSE", placeholder: TEMPLATE_AUTHOR },
