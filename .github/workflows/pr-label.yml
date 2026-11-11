@@ -16,10 +16,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # One of the two jobs that write anything (release.yml is the other). It
-      # writes a label and nothing else, and a fork PR's token cannot even do that — see the
-      # fallback below. `pull_request` (never `pull_request_target`) is used, so
-      # no fork code runs with this token.
+      # One of the two jobs that write anything (release.yml is the other).
+      # It writes a label and nothing else, and a fork PR's token cannot even
+      # do that — see the fallback below. `pull_request` (never
+      # `pull_request_target`) is used, so no fork code runs with this token.
       pull-requests: write # to add one label to the pull request
     steps:
       - name: Apply the label matching the PR title type

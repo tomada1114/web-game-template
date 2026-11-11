@@ -106,13 +106,16 @@ export function assertGenerated(destination, packageName, title) {
 
   const changelog = readFileSync(path.join(destination, "CHANGELOG.md"), "utf8");
   // The skeleton keeps exactly one empty `## [Unreleased]` heading; any other
-  // `## ` heading, or any entry under it, came from the template's history.
+  // `## ` heading, or an entry line anywhere in the file, came from the
+  // template's history.
   const headings = changelog.match(/^## .*$/gm) ?? [];
   const afterUnreleased = changelog.split(/^## \[Unreleased\]$/m)[1] ?? "";
+  const hasEntry = /^\s*[-*+]\s/m.test(changelog);
   if (
     headings.length !== 1 ||
     headings[0] !== "## [Unreleased]" ||
-    afterUnreleased.trim() !== ""
+    afterUnreleased.trim() !== "" ||
+    hasEntry
   ) {
     throw new Error(
       `ERR_CHANGELOG_ENTRY_REMAINING: generated ${packageName} retains a template changelog entry.\n` +

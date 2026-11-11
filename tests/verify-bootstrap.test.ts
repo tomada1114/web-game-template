@@ -322,6 +322,19 @@ describe("assertGenerated", () => {
     );
   });
 
+  it("throws ERR_CHANGELOG_ENTRY_REMAINING when an entry precedes ## [Unreleased]", () => {
+    const destination = makeDestination();
+    writeValidFixture(destination, "acme-game");
+    writeFileSync(
+      path.join(destination, "CHANGELOG.md"),
+      "# Changelog\n\n- something\n\n## [Unreleased]\n",
+    );
+
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
+      /ERR_CHANGELOG_ENTRY_REMAINING/,
+    );
+  });
+
   it("throws ERR_CHANGELOG_ENTRY_REMAINING when ## [Unreleased] is missing", () => {
     const destination = makeDestination();
     writeValidFixture(destination, "acme-game");

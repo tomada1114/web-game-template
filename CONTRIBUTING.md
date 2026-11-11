@@ -92,6 +92,20 @@ Commits and the pull request title follow Conventional Commits,
 `<type>(<optional-scope>): <summary>`. The accepted types are the `types:` input of
 [the PR title workflow](.github/workflows/check-pr-title.yml).
 
+### Releasing
+
+A release is a GitHub Release carrying the CrazyGames zip, built by
+[the release workflow](.github/workflows/release.yml):
+
+1. Bump `version` in `apps/web/package.json` and move the `## [Unreleased]` lines of
+   `CHANGELOG.md` into a section for that version, in a pull request.
+2. After it merges, tag the merge commit `vX.Y.Z` (the new version) and push the tag.
+3. The workflow refuses a tag that is not `vMAJOR.MINOR.PATCH`, does not match the
+   version, or is not on the default branch; otherwise it runs `pnpm check` and attaches
+   `.package/<slug>-<version>-crazygames.zip` to the release for that tag.
+
+Uploading the zip to CrazyGames stays a manual step in its developer portal.
+
 With Claude Code, `CLAUDE.md` is the project guide and the procedures are the skills
 under `.claude/skills/`: `tdd`, `smart-commit`, `create-pr`, and `running-the-app` for a
 change made by hand, `shipping-issues` to take an issue through to a merged pull
