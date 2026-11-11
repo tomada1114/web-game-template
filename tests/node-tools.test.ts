@@ -152,7 +152,7 @@ describe("resolveDependencyBin", () => {
     );
   });
 
-  it("names the path it looked for, relative to the repository root", () => {
+  it("names the path it looked for, relative to the directory it searched", () => {
     expect(() => resolveDependencyBin("also-not-installed")).toThrow(
       /^Expected: node_modules\/also-not-installed\/package\.json$/m,
     );
@@ -162,7 +162,11 @@ describe("resolveDependencyBin", () => {
         undefined,
         path.join(repoRoot, "apps"),
       ),
-    ).toThrow(/^Expected: apps\/node_modules\/also-not-installed\/package\.json$/m);
+    ).toThrow(/^Expected: node_modules\/also-not-installed\/package\.json$/m);
+    // A directory outside the repository is named without a ../ chain.
+    expect(() =>
+      resolveDependencyBin("also-not-installed", undefined, makeWorkspace("bin-")),
+    ).toThrow(/^Expected: node_modules\/also-not-installed\/package\.json$/m);
   });
 
   it("resolves a string bin field directly, ignoring binName", () => {

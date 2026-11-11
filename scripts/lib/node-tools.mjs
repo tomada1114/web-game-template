@@ -107,7 +107,8 @@ export function npmCliPath() {
  * @param {string} [binName] - Which `bin` entry to use; defaults to the only one.
  * @param {string} [packageDir] - Directory whose `node_modules` holds the
  * dependency; defaults to the repository root. A workspace package's own
- * dependencies are linked under that package, not under the root.
+ * dependencies are linked under that package, not under the root. A missing
+ * dependency's expected path is named relative to this directory.
  * @returns {string} Absolute path of the dependency's entry script.
  * @throws Error when the dependency is not installed or declares no such bin.
  */
@@ -117,7 +118,7 @@ export function resolveDependencyBin(packageName, binName, packageDir = repoRoot
   if (!existsSync(manifestPath)) {
     throw new Error(
       `ERR_DEPENDENCY_MISSING: ${packageName} is not installed.\n` +
-        `Expected: ${path.relative(repoRoot, manifestPath).split(path.sep).join("/")}\n` +
+        `Expected: ${path.relative(packageDir, manifestPath).split(path.sep).join("/")}\n` +
         "Next: run `pnpm install --frozen-lockfile`.",
     );
   }

@@ -17,6 +17,31 @@ import { inflateRawSync } from "node:zlib";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 
+import type * as NodeFs from "node:fs";
+
+// While `corruptZip.on` is set, reading a portal zip back returns it with its
+// central-directory offset pointing past the end, the damage a failed disk
+// write leaves: the only way to make the script's own read-back fail.
+const corruptZip = vi.hoisted(() => ({ on: false }));
+vi.mock("node:fs", async (importOriginal) => {
+  const fs = await importOriginal<typeof NodeFs>();
+  const readFileSync = ((file: unknown, ...rest: unknown[]) => {
+    const data = (fs.readFileSync as (...args: unknown[]) => unknown)(file, ...rest);
+    if (
+      corruptZip.on &&
+      typeof file === "string" &&
+      file.endsWith("-crazygames.zip") &&
+      Buffer.isBuffer(data)
+    ) {
+      const damaged = Buffer.from(data);
+      damaged.writeUInt32LE(0xfffffff0, damaged.length - 22 + 16);
+      return damaged;
+    }
+    return data;
+  }) as typeof NodeFs.readFileSync;
+  return { ...fs, default: { ...fs, readFileSync }, readFileSync };
+});
+
 import {
   ZipError,
   checkZip,
@@ -350,6 +375,69 @@ describe("the checks on the written zip", () => {
     expect(failure).toContain(name);
   });
 
+  it.each([
+    ["a single-quoted src", "index.html", "<script src='/assets/x.js'></script>"],
+    ["an uppercase SRC", "index.html", '<SCRIPT SRC="/assets/x.js"></SCRIPT>'],
+    ["an unquoted src", "index.html", "<img src=/logo.png>"],
+    ["an unquoted href with spaces around =", "index.html", "<a href = /about>"],
+    ["an unquoted CSS url()", "assets/style.css", "a { background: url(/bg.png); }"],
+    [
+      "a double-quoted CSS url()",
+      "assets/style.css",
+      'a { background: url("/bg.png"); }',
+    ],
+    [
+      "a single-quoted CSS URL()",
+      "assets/style.css",
+      "a { background: URL( '/bg.png' ); }",
+    ],
+  ])("fails ERR_ZIP_ABSOLUTE_PATH for %s", (_label, name, content) => {
+    const root = makeRoot({ "index.html": INDEX_HTML, [name]: content });
+
+    expect(main([], root)).toBe(1);
+    const failure = printed(stderr);
+    expect(failure).toContain("ERR_ZIP_ABSOLUTE_PATH");
+    expect(failure).toContain(name);
+    expect(existsSync(path.join(root, ZIP_NAME))).toBe(false);
+  });
+
+  it("passes protocol-relative URLs, which the portal allows", () => {
+    const root = makeRoot({
+      "index.html":
+        '<script src="//cdn.example.com/sdk.js"></script>\n' +
+        "<link href='//cdn.example.com/a.css' />\n<img src=//cdn.example.com/a.png>\n",
+      "assets/style.css": "a { background: url(//cdn.example.com/bg.png); }\n",
+    });
+
+    expect(main([], root)).toBe(0);
+    expect(existsSync(path.join(root, ZIP_NAME))).toBe(true);
+  });
+
+  it("quotes at most 80 characters of a long root-absolute URL", () => {
+    const url = `/${"a".repeat(200)}.js`;
+    const problems = checkZip([
+      { name: "index.html", data: Buffer.from(`<script src="${url}"></script>`) },
+    ]);
+
+    expect(problems.map((problem) => problem.code)).toEqual(["ERR_ZIP_ABSOLUTE_PATH"]);
+    expect(problems[0]?.message).toContain(`Actual: src="/${"a".repeat(74)}…\n`);
+  });
+
+  it("fails ERR_ZIP_CORRUPT and removes the zip when it cannot be read back", () => {
+    const root = makeRoot({ "index.html": INDEX_HTML });
+    corruptZip.on = true;
+    try {
+      expect(main([], root)).toBe(1);
+    } finally {
+      corruptZip.on = false;
+    }
+    const failure = printed(stderr);
+    expect(failure).toContain("ERR_ZIP_CORRUPT");
+    expect(failure).toContain(ZIP_NAME);
+    expect(existsSync(path.join(root, ZIP_NAME))).toBe(false);
+    expect(printed(stdout)).not.toContain("package: wrote");
+  });
+
   it("passes relative ./ URLs", () => {
     const root = makeRoot({
       "index.html":
@@ -387,7 +475,30 @@ describe("a stage that fails before the zip is written", () => {
     expect(failure).toContain("ERR_BUDGET_EXCEEDED");
     expect(failure).toContain(".package/crazygames");
     expect(failure).toContain("Actual: 301 files");
+    expect(failure).toMatch(/^Next: .*`pnpm package:crazygames`/m);
+    expect(failure).not.toContain("pnpm budget");
     expect(existsSync(path.join(root, ZIP_NAME))).toBe(false);
+  });
+
+  it("removes every portal zip in .package/ before building, and nothing else", () => {
+    const root = makeRoot(
+      { "index.html": INDEX_HTML },
+      {
+        ".package/old-game-0.0.1-crazygames.zip": "stale",
+        ".package/fixture-game-1.2.2-crazygames.zip": "stale",
+        ".package/notes.txt": "kept",
+        ".package/other-portal.zip": "kept",
+        ".package/archive/fixture-game-0.9.0-crazygames.zip": "kept",
+      },
+    );
+    writeFileSync(path.join(root, "apps/web/build-error.txt"), "fixture: fails\n");
+
+    expect(main([], root)).toBe(1);
+    expect(snapshot(path.join(root, ".package"))).toEqual({
+      "archive/fixture-game-0.9.0-crazygames.zip": Buffer.from("kept").toString("hex"),
+      "notes.txt": Buffer.from("kept").toString("hex"),
+      "other-portal.zip": Buffer.from("kept").toString("hex"),
+    });
   });
 
   it("reports a failed build and leaves no zip from an earlier run behind", () => {

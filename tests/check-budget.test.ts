@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import consoleModule from "node:console";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -11,6 +11,8 @@ import { main } from "../scripts/check-budget.mjs";
 import {
   BUDGET_MAX_BYTES,
   BUDGET_MAX_FILES,
+  BudgetError,
+  checkBudget,
   listFiles,
 } from "../scripts/lib/budget.mjs";
 
@@ -209,6 +211,58 @@ describe("the directory argument", () => {
   it("rejects a second directory as bad usage, under the default root", () => {
     expect(main(["one", "two"])).toBe(2);
     expect(printed(stderr)).toContain("ERR_BUDGET_USAGE");
+  });
+});
+
+describe("a symbolic link in the build", () => {
+  it.each([
+    ["a file", "index.html"],
+    ["a directory", "assets"],
+  ])("fails ERR_BUDGET_SYMLINK for a link to %s, naming it", (_label, target) => {
+    const root = makeDirectory();
+    const dist = path.join(root, "apps/web/dist");
+    writeSized(dist, "index.html", 4);
+    writeSized(dist, "assets/game.js", 4);
+    symlinkSync(path.join(dist, target), path.join(dist, "linked"));
+
+    expect(main([], root)).toBe(1);
+    const failure = printed(stderr);
+    expect(failure).toContain("ERR_BUDGET_SYMLINK");
+    expect(failure).toContain("linked");
+    expect(failure).toMatch(/^Next: .*`pnpm budget`/m);
+    expect(stdout).not.toHaveBeenCalled();
+  });
+
+  it("makes listFiles throw a BudgetError with code ERR_BUDGET_SYMLINK", () => {
+    const build = makeDirectory();
+    writeSized(build, "index.html", 1);
+    symlinkSync(path.join(build, "index.html"), path.join(build, "copy.html"));
+
+    let thrown: unknown;
+    try {
+      listFiles(build);
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(BudgetError);
+    expect((thrown as BudgetError).code).toBe("ERR_BUDGET_SYMLINK");
+  });
+});
+
+describe("the rerun command a caller names", () => {
+  it("appears in the Next: line of an over-budget failure", () => {
+    const build = makeBuildOfFiles(BUDGET_MAX_FILES + 1);
+
+    expect(checkBudget(build, build, "pnpm package:crazygames")).toBe(1);
+    expect(printed(stderr)).toMatch(/^Next: .*`pnpm package:crazygames`/m);
+    expect(printed(stderr)).not.toContain("pnpm budget");
+  });
+
+  it("appears in the Next: line when there is nothing to measure", () => {
+    const root = makeDirectory();
+
+    expect(checkBudget("missing", root, "pnpm package:crazygames")).toBe(1);
+    expect(printed(stderr)).toMatch(/^Next: rerun `pnpm package:crazygames`\.$/m);
   });
 });
 

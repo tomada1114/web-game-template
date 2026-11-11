@@ -16,6 +16,22 @@ export const BUDGET_MAX_FILES = 300;
 
 const REPORTED_FILES = 5;
 
+/** The command that remeasures the local web build. */
+const BUDGET_RERUN = "pnpm budget";
+
+/** A build directory {@link listFiles} cannot measure. */
+export class BudgetError extends Error {
+  /**
+   * @param {string} file - The symbolic link, relative to the build directory.
+   */
+  constructor(file) {
+    super(`ERR_BUDGET_SYMLINK: ${file} in the build is a symbolic link.`);
+    this.name = "BudgetError";
+    this.code = "ERR_BUDGET_SYMLINK";
+    this.file = file;
+  }
+}
+
 /**
  * One file of a build.
  *
@@ -30,16 +46,20 @@ const REPORTED_FILES = 5;
  *
  * @param {string} directory - Absolute path of an existing directory.
  * @returns {BuildFile[]} The files, sorted by path.
+ * @throws BudgetError with code ERR_BUDGET_SYMLINK when the directory holds a
+ * symbolic link: its size on disk is the link's, not what a reader of the
+ * file gets, and a link to a directory cannot be read as a file at all.
  */
 export function listFiles(directory) {
   return readdirSync(directory, { recursive: true, withFileTypes: true })
     .filter((entry) => !entry.isDirectory())
     .map((entry) => {
       const absolute = path.join(entry.parentPath, entry.name);
-      return {
-        path: path.relative(directory, absolute).split(path.sep).join("/"),
-        bytes: lstatSync(absolute).size,
-      };
+      const relative = path.relative(directory, absolute).split(path.sep).join("/");
+      if (entry.isSymbolicLink()) {
+        throw new BudgetError(relative);
+      }
+      return { path: relative, bytes: lstatSync(absolute).size };
     })
     .sort((a, b) => (a.path < b.path ? -1 : 1));
 }
@@ -50,21 +70,42 @@ export function listFiles(directory) {
  * @param {string} given - The directory, relative to `root` or absolute. It
  * is named in the report as given.
  * @param {string} root - Directory a relative `given` resolves against.
- * @returns {number} Process exit code: 0 within the budget, 1 over it or with
- * nothing to measure.
+ * @param {string} [rerun] - The command that rebuilds and remeasures `given`,
+ * named in a failure's Next: line; defaults to `pnpm budget`.
+ * @returns {number} Process exit code: 0 within the budget, 1 over it, with
+ * nothing to measure, or with a directory that cannot be measured.
  */
-export function checkBudget(given, root) {
+export function checkBudget(given, root, rerun = BUDGET_RERUN) {
   const directory = path.resolve(root, given);
   if (statSync(directory, { throwIfNoEntry: false })?.isDirectory() !== true) {
     console.error(
       `ERR_BUDGET_NO_BUILD: ${given} is not a directory.\n` +
         "Expected: the directory a build wrote.\n" +
-        "Next: run `pnpm build`, then rerun `pnpm budget`.",
+        // `pnpm budget` measures a build it did not make; any other caller's
+        // command builds the directory itself.
+        (rerun === BUDGET_RERUN
+          ? "Next: run `pnpm build`, then rerun `pnpm budget`."
+          : `Next: rerun \`${rerun}\`.`),
     );
     return 1;
   }
 
-  const files = listFiles(directory);
+  /** @type {BuildFile[]} */
+  let files;
+  try {
+    files = listFiles(directory);
+  } catch (error) {
+    if (error instanceof BudgetError) {
+      console.error(
+        `${error.message}\n` +
+          `Expected: regular files and directories only in ${given}.\n` +
+          `Next: make the build copy ${error.file} instead of linking it, ` +
+          `then rerun \`${rerun}\`.`,
+      );
+      return 1;
+    }
+    throw error;
+  }
   const totalBytes = files.reduce((sum, file) => sum + file.bytes, 0);
   const largest = files
     .toSorted((a, b) => b.bytes - a.bytes)
@@ -80,7 +121,7 @@ export function checkBudget(given, root) {
         `Expected: ≤ ${String(BUDGET_MAX_FILES)} files\n` +
         `Actual: ${String(files.length)} files\n` +
         `${report}\n` +
-        "Next: shrink or drop the largest files, then rerun `pnpm budget`.",
+        `Next: shrink or drop the largest files, then rerun \`${rerun}\`.`,
     );
     return 1;
   }

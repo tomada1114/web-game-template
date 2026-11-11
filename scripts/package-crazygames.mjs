@@ -7,7 +7,7 @@
 // apps/web/dist, so the local build a preview serves is left as it was.
 import { Buffer } from "node:buffer";
 import console from "node:console";
-import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
@@ -44,7 +44,16 @@ const DOS_TIME = 0;
 const DOS_DATE = 0x0021;
 
 const SCANNED_ENTRY = /\.(?:html?|m?js|css)$/;
-const ROOT_ABSOLUTE_URL = /(?:src|href)="\/[^"]{0,80}"?/;
+// A same-origin absolute URL: one "/" not followed by another, since a
+// protocol-relative "//host/..." URL is allowed. Each pattern takes the value
+// whole, in double, single or no quotes.
+const ROOT_ABSOLUTE_URLS = [
+  /\b(?:src|href)\s*=\s*(?:"\/(?!\/)[^"]*"|'\/(?!\/)[^']*'|\/(?!\/)[^\s"'`>]*)/i,
+  /\burl\(\s*(?:"\/(?!\/)[^"]*"|'\/(?!\/)[^']*'|\/(?!\/)[^\s"')]*)\s*\)/i,
+];
+// Longest URL quoted in a report, so a minified line cannot flood it.
+const REPORTED_URL_CHARACTERS = 80;
+const ZIP_SUFFIX = `-${PORTAL}.zip`;
 
 /**
  * One file inside an archive.
@@ -58,7 +67,7 @@ const ROOT_ABSOLUTE_URL = /(?:src|href)="\/[^"]{0,80}"?/;
  * One reason an archive cannot be uploaded.
  *
  * @typedef {object} ZipProblem
- * @property {"ERR_ZIP_LAYOUT" | "ERR_ZIP_SOURCEMAP" | "ERR_ZIP_ABSOLUTE_PATH"} code
+ * @property {"ERR_ZIP_LAYOUT" | "ERR_ZIP_SOURCEMAP" | "ERR_ZIP_ABSOLUTE_PATH" | "ERR_ZIP_CORRUPT"} code
  * @property {string} message - The stderr block for this problem, code included.
  */
 
@@ -224,14 +233,21 @@ export function checkZip(entries) {
     if (!SCANNED_ENTRY.test(entry.name)) {
       continue;
     }
-    const url = ROOT_ABSOLUTE_URL.exec(entry.data.toString("utf8"));
-    if (url !== null) {
+    const content = entry.data.toString("utf8");
+    const url = ROOT_ABSOLUTE_URLS.map((pattern) => pattern.exec(content)?.[0]).find(
+      (match) => match !== undefined,
+    );
+    if (url !== undefined) {
+      const shown =
+        url.length > REPORTED_URL_CHARACTERS
+          ? `${url.slice(0, REPORTED_URL_CHARACTERS)}…`
+          : url;
       problems.push({
         code: "ERR_ZIP_ABSOLUTE_PATH",
         message:
           `ERR_ZIP_ABSOLUTE_PATH: ${entry.name} references a root-absolute URL.\n` +
           'Expected: a relative URL, such as src="./assets/x.js".\n' +
-          `Actual: ${url[0]}\n` +
+          `Actual: ${shown}\n` +
           'Next: keep Vite\'s `base: "./"` and make that URL relative, ' +
           "then rerun `pnpm package:crazygames`.",
       });
@@ -267,6 +283,28 @@ function fileNamePart(root, manifest, key) {
       `Next: set "${key}" in ${manifest}, then rerun \`pnpm package:crazygames\`.`,
   );
   return undefined;
+}
+
+/**
+ * Remove every portal zip directly inside the package directory.
+ *
+ * @param {string} root - Repository root.
+ */
+function removePortalZips(root) {
+  const directory = path.join(root, PACKAGE_DIRECTORY);
+  /** @type {import("node:fs").Dirent[]} */
+  let entries;
+  try {
+    entries = readdirSync(directory, { withFileTypes: true });
+  } catch {
+    // No package directory yet: nothing to remove.
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.isFile() && entry.name.endsWith(ZIP_SUFFIX)) {
+      rmSync(path.join(directory, entry.name), { force: true });
+    }
+  }
 }
 
 /**
@@ -335,16 +373,17 @@ export function main(argv = [], root = repoRoot) {
   if (version === undefined) {
     return 1;
   }
-  const zipName = `${PACKAGE_DIRECTORY}/${name}-${version}-${PORTAL}.zip`;
+  const zipName = `${PACKAGE_DIRECTORY}/${name}-${version}${ZIP_SUFFIX}`;
   const zipPath = path.join(root, zipName);
-  // Until this run's own zip has passed its checks, no file may sit at the
-  // path an upload is taken from.
-  rmSync(zipPath, { force: true });
+  // Until this run's own zip has passed its checks, no portal zip may sit
+  // where an upload is taken from, including one an older name or version
+  // left behind.
+  removePortalZips(root);
 
   if (!buildPortal(root)) {
     return 1;
   }
-  const budget = checkBudget(BUILD_DIRECTORY, root);
+  const budget = checkBudget(BUILD_DIRECTORY, root, "pnpm package:crazygames");
   if (budget !== 0) {
     return budget;
   }
@@ -361,8 +400,27 @@ export function main(argv = [], root = repoRoot) {
   );
 
   const written = readFileSync(zipPath);
-  const entries = readZip(written);
-  const problems = checkZip(entries);
+  /** @type {ZipEntry[]} */
+  let entries = [];
+  /** @type {ZipProblem[] | undefined} */
+  let problems;
+  try {
+    entries = readZip(written);
+  } catch (error) {
+    // A ZipError, or the RangeError or zlib error a damaged offset or
+    // deflate stream raises first.
+    problems = [
+      {
+        code: "ERR_ZIP_CORRUPT",
+        message:
+          `ERR_ZIP_CORRUPT: ${zipName} cannot be read back.\n` +
+          "Expected: an archive whose every entry inflates to its recorded CRC-32.\n" +
+          `Actual: ${error instanceof Error ? error.message : String(error)}\n` +
+          "Next: rerun `pnpm package:crazygames`.",
+      },
+    ];
+  }
+  problems ??= checkZip(entries);
   if (problems.length > 0) {
     rmSync(zipPath, { force: true });
     console.error(
