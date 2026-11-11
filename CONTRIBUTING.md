@@ -20,21 +20,29 @@ pnpm check
 ## Development Workflow
 
 ```sh
-pnpm dev             # Vite's dev server for apps/web; runs until stopped
-pnpm check:quick     # format check, lint, typecheck, tests: the everyday gate
-pnpm check           # the full gate: the checks above with coverage, then the build
-pnpm fix             # ESLint autofix, then Prettier
-pnpm test            # every test once
-pnpm test:coverage   # tests with the coverage thresholds enforced
-pnpm typecheck       # tsc -b over every workspace program
-pnpm build           # build apps/web into apps/web/dist
-pnpm e2e:browsers    # once per machine: install Playwright's Chromium
-pnpm test:e2e        # the Chromium boot smoke test against a fresh build
+pnpm dev                # Vite's dev server for apps/web; runs until stopped
+pnpm check:quick        # format check, lint, typecheck, tests: the everyday gate
+pnpm check              # the full gate: pnpm check:source, pnpm budget, pnpm package:crazygames
+pnpm check:source       # format check, lint, typecheck, tests with coverage, then the build
+pnpm fix                # ESLint autofix, then Prettier
+pnpm format:check       # fail on unformatted files
+pnpm lint               # ESLint, including the determinism block for packages/core/src
+pnpm typecheck          # tsc -b over every workspace program
+pnpm test               # every test once
+pnpm test:coverage      # tests with the coverage thresholds enforced
+pnpm build              # build apps/web into apps/web/dist
+pnpm budget             # fail when apps/web/dist is over the bundle budget
+pnpm package:crazygames # the portal build and .package/<slug>-<version>-crazygames.zip
+pnpm check:staged       # the pre-commit secret check, run by hand
+pnpm e2e:browsers       # once per machine: install Playwright's Chromium
+pnpm test:e2e           # the Chromium boot smoke test against a fresh build
 ```
 
-`pnpm test:e2e` runs `pnpm run build` first, overwriting `apps/web/dist`, then serves it
-with `vite preview` on port 4173. Set `E2E_PORT` (an integer from 1 to 65535) to run it
-in two worktrees at once.
+`pnpm check` is the gate for a pull request; it mutates no tracked file. `pnpm test:e2e`
+needs a browser, so it stays out of `pnpm check` and runs as its own CI job. It runs
+`pnpm run build` first, overwriting `apps/web/dist`, then serves it with `vite preview`
+on port 4173. Set `E2E_PORT` (an integer from 1 to 65535) to run it in two worktrees at
+once.
 
 Run one Vitest project with `pnpm exec vitest run --project core` (or `web`, `unit`,
 `automation`), or one file with `pnpm exec vitest run <path>`. CI and the pre-commit
@@ -91,8 +99,10 @@ pnpm check
    something a user observes moved.
 3. Run `pnpm check` on the committed tree. `pnpm fix` applies formatting; commit its
    result before judging the gate.
-4. Open the pull request with the template: a Summary, exactly one `Release:` line, a
-   Test Plan naming the commands you ran, and the Checklist.
+4. Open the pull request with the template: a Summary, exactly one `Release:` line
+   (`Release: none` or `Release: needed — <what the player sees>`), exactly one
+   `Rules version:` line (`unchanged` or `bumped to <n>`) when the diff touches
+   `packages/core`, a Test Plan naming the commands you ran, and the Checklist.
 
 Commits and the pull request title follow Conventional Commits,
 `<type>(<optional-scope>): <summary>`. The accepted types are the `types:` input of

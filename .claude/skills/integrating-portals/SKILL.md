@@ -16,8 +16,8 @@ description: >
 integration, storage, the portal build and zip, and the portal requirements the
 repository keeps. **Does not own:** where scenes call the platform (`building-scenes`);
 version, tag, and GitHub Release (`releasing-builds`); the `.mjs` authoring contract the
-two scripts follow (`writing-repo-scripts`); wiring a script into `pnpm check` or CI
-(`changing-gates`).
+two scripts follow (`.claude/rules/scripts.md`); wiring a script into `pnpm check` or CI
+(`.claude/rules/gates.md`).
 
 ## Platform interface
 
@@ -109,7 +109,8 @@ two scripts follow (`writing-repo-scripts`); wiring a script into `pnpm check` o
   `phaser.min.js` 4.2.1 measures 1,375,976 bytes (352,441 gzip;
   https://cdn.jsdelivr.net/npm/phaser@4.2.1/dist/phaser.min.js, checked 2026-11-05).
 - When the budget fails, read the five-file list and shrink or drop the asset. Raising
-  the limit is a gate change, not a fix. **REQUIRED:** `changing-gates`.
+  the limit is a gate change, not a fix. See the conventions in
+  `.claude/rules/gates.md`.
 - `pnpm package:crazygames` (`scripts/package-crazygames.mjs`) builds with
   `VITE_PLATFORM=crazygames` into the `crazygames` folder under `.package`, runs the
   budget on that directory, and zips its contents into

@@ -142,19 +142,27 @@ const SELF_REMOVED_PATHS = [
 // the template.
 const AI_LAYER_TARGETS = [
   "CLAUDE.md",
+  ".claude/rules/architecture.md",
   ".claude/rules/dependencies.md",
   ".claude/rules/gates.md",
   ".claude/rules/guidance.md",
   ".claude/rules/scripts.md",
   ".claude/rules/tests.md",
   ".claude/rules/typescript.md",
+  ".claude/skills/building-scenes/SKILL.md",
   ".claude/skills/create-pr/SKILL.md",
+  ".claude/skills/designing-ui/SKILL.md",
+  ".claude/skills/designing-ui/references/design-lock.md",
+  ".claude/skills/integrating-portals/SKILL.md",
   ".claude/skills/merge-dependabot/SKILL.md",
   ".claude/skills/merge-dependabot/references/failure-modes.md",
   ".claude/skills/merge-dependabot/scripts/survey-prs.mjs",
+  ".claude/skills/releasing-builds/SKILL.md",
   ".claude/skills/running-the-app/SKILL.md",
   ".claude/skills/smart-commit/SKILL.md",
+  ".claude/skills/starting-an-app/SKILL.md",
   ".claude/skills/tdd/SKILL.md",
+  ".claude/skills/writing-game-core/SKILL.md",
 ];
 
 // Bootstrap-only markers: a `template-only` block is removed from every

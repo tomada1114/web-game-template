@@ -3,10 +3,11 @@ name: running-the-app
 description: >
   Use when asked to run the game or the page, try a change against a live server, check
   what the built site serves, or put observed output in a pull request, and no test
-  shows the behavior. Covers starting a Vite dev server, or a vite preview of the build,
-  on a free port with --strictPort, capturing curl output of index.html and its ./
-  assets as evidence, and stopping it before the turn ends, without touching the
-  developer's own pnpm dev (port 5173).
+  shows the behavior, or when running the e2e boot smoke (pnpm test:e2e, E2E_PORT) from
+  a worktree. Covers starting a Vite dev server, or a vite preview of the build, on a
+  free port with --strictPort, capturing curl output of index.html and its ./ assets as
+  evidence, and stopping it before the turn ends, without touching the developer's own
+  pnpm dev (port 5173).
 ---
 
 # Running the App
@@ -22,7 +23,13 @@ Stop at the first tier that shows what the change does.
 
 1. **A test.** It exercises the same code as a live page and its result outlives the
    turn. If a lasting assertion would show the behavior, write one.
-2. **A server of your own, then `curl`,** for what only a listening process shows.
+2. **`pnpm test:e2e`,** for what only a browser shows on the built page. It builds,
+   serves on `E2E_PORT` (default 4173) with `strictPort`, and fails when the port is
+   taken. Pick the port as in "Running a server of your own": take the OS-assigned
+   `port`, run the `probe` on it, and only when it reports nothing listening run
+   `E2E_PORT=$port pnpm test:e2e`. Never stop what holds a port. The evidence is the
+   test's own output.
+3. **A server of your own, then `curl`,** for what only a listening process shows.
    - Vite's dev server serves the page from source: that the entry resolves and
      transforms, and what the page's markup is.
    - `vite preview` serves the build in `apps/web/dist`, which is what a portal

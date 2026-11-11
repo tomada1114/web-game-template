@@ -126,7 +126,7 @@ const KNOWN_MATH = `/^(${[...ALLOWED_MATH, ...NON_DETERMINISTIC_MATH].join("|")}
 const LOCALE_MEMBER = "/^(localeCompare$|toLocale)/";
 
 const DETERMINISM_MESSAGE =
-  "packages/core must replay identically on every engine: see docs/design/skill-drafts/writing-game-core.md. Pass the value in from apps/web, or write it in integers.";
+  "packages/core must replay identically on every engine: see .claude/skills/writing-game-core/SKILL.md. Pass the value in from apps/web, or write it in integers.";
 
 export default defineConfig([
   // Only generated trees are ignored; everything hand-written is linted,
