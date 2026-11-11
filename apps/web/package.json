@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@my-game/core": "workspace:*"
+    "@my-game/core": "workspace:*",
+    "phaser": "^4.2.1"
   },
   "devDependencies": {
     "vite": "^8.1.5"
