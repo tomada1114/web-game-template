@@ -468,7 +468,8 @@ describe("bootstrap generation", () => {
       "bootstrap:check",
     );
     const changelog = readFileSync(path.join(root, "CHANGELOG.md"), "utf8");
-    expect(changelog).not.toMatch(/^## /m);
+    expect(changelog.match(/^## .*$/gm)).toEqual(["## [Unreleased]"]);
+    expect(changelog.trimEnd().endsWith("## [Unreleased]")).toBe(true);
     expect(changelog).not.toContain("0.1.1");
     expect(changelog).toContain("Keep a Changelog");
 

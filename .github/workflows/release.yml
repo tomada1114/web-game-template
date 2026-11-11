@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+# Nothing is inherited: the job below re-declares the scopes it needs.
+permissions: {}
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -eo pipefail -u {0}
+
+# A tag is released exactly once; a second run for the same ref waits rather
+# than cancelling a release that is already being created.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release the CrazyGames zip
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write # to create the GitHub Release and upload the zip
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Runs before anything is installed or built: a tag that disagrees with
+      # the version would name a zip and a release after different versions.
+      - name: Check the tag matches apps/web/package.json
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="$(jq -r .version apps/web/package.json)"
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error::Tag $TAG does not match apps/web/package.json version $VERSION (expected v$VERSION)."
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      # No dependency cache on a tag build: the release is built from the
+      # lockfile alone, never from a store another run populated.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The full gate, which also writes the zip through package:crazygames.
+      # Nothing is built a second time.
+      - name: Run the full gate
+        run: pnpm run check
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" .package/*.zip --generate-notes

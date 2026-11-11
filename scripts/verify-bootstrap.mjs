@@ -105,10 +105,18 @@ export function assertGenerated(destination, packageName, title) {
   }
 
   const changelog = readFileSync(path.join(destination, "CHANGELOG.md"), "utf8");
-  if (/^## /m.test(changelog)) {
+  // The skeleton keeps exactly one empty `## [Unreleased]` heading; any other
+  // `## ` heading, or any entry under it, came from the template's history.
+  const headings = changelog.match(/^## .*$/gm) ?? [];
+  const afterUnreleased = changelog.split(/^## \[Unreleased\]$/m)[1] ?? "";
+  if (
+    headings.length !== 1 ||
+    headings[0] !== "## [Unreleased]" ||
+    afterUnreleased.trim() !== ""
+  ) {
     throw new Error(
       `ERR_CHANGELOG_ENTRY_REMAINING: generated ${packageName} retains a template changelog entry.\n` +
-        "Expected: a bare Keep a Changelog skeleton with no version headings.\n" +
+        "Expected: a Keep a Changelog skeleton whose only heading is an empty ## [Unreleased].\n" +
         "Next: update the generated CHANGELOG.md skeleton, then rerun bootstrap:e2e.",
     );
   }
