@@ -574,9 +574,7 @@ describe("checkGenerated", () => {
     writeProductFixture(destination);
     const text = readFileSync(path.join(destination, "CLAUDE.md"), "utf8");
     expect(text).not.toContain("TODO:");
-    expect(text).toMatch(
-      /^## Product\n\nSpace Tiles is [^\n]+\n[^\n]+\n\n## Commands\n$/m,
-    );
+    expect(text).toMatch(/^## Product\n\nSpace Tiles is [^\n]+\n\n## Commands\n$/m);
     expect(text.startsWith("# Guide\n\n## Product\n")).toBe(true);
   });
 });

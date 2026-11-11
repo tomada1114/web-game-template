@@ -47,9 +47,9 @@ export const PRODUCT_PLACEHOLDER = [
   "TODO: Non-goals, copied verbatim from docs/product/requirements.md.",
   "TODO: Where decisions live: docs/product/requirements.md and the skills.",
 ];
+// One line under Prettier's width, so `prettier --check` accepts it unwrapped.
 const PRODUCT_FIXTURE = [
-  "Space Tiles is the fixture game bootstrap:check writes to prove the gate turns green.",
-  "It is for nobody; the core interaction is running the full gate once.",
+  "Space Tiles is the fixture game bootstrap:check writes to turn the gate green.",
 ];
 
 /**
