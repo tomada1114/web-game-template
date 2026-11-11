@@ -138,17 +138,12 @@ export default defineConfig({
           statements: 90,
           branches: 80,
         },
-        // Raised again by issue #98, which added dedicated coverage for
-        // verify-bootstrap.mjs's main()/run()/assertGenerated() and for
-        // scripts since removed from this repository — the functions issue
-        // #88 deliberately left out of its own, smaller raise. Measured baseline
-        // at the time of this raise: 88.52% statements, 80.05% branches,
-        // 93.79% functions, 88.48% lines, rounded down to the nearest
-        // multiple of 5, the same convention used for both earlier raises
-        // (#44, #88). It exists so a new automation script can't ship with
-        // zero tests and nothing reporting the number moving;
-        // scripts/lib/guard/** also counts toward this aggregate, on top of
-        // its own stricter floor above.
+        // Aggregate floor over every automation script, so a new one can't ship
+        // with zero tests and nothing reporting the number moving. It sits below
+        // the guard floor above because scripts like bootstrap.mjs and
+        // verify-bootstrap.mjs have process- and filesystem-bound paths that unit
+        // tests reach only partly; scripts/lib/guard/** also counts toward this
+        // aggregate, on top of its own stricter floor.
         "scripts/**": {
           lines: 85,
           functions: 90,

@@ -209,7 +209,7 @@ function typosExtendExclude(): string[] {
 }
 
 describe("the generated/ignored tree stays consistent across tooling", () => {
-  // Build/doc output nobody commits: .gitignore keeps it out of git
+  // Build output nobody commits: .gitignore keeps it out of git
   // entirely, so there is nothing in it for ESLint, Prettier, or typos to
   // usefully check either.
   const BUILD_OUTPUT = ["dist/", "coverage/"];
@@ -244,6 +244,7 @@ describe("the generated/ignored tree stays consistent across tooling", () => {
     for (const removed of [".smoke/", ".at" + "tw/", "docs/api/"]) {
       expect(gitignoreLines).not.toContain(removed);
       expect(prettierLines).not.toContain(removed);
+      expect(typosExclude).not.toContain(removed);
     }
   });
 

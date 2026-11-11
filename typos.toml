@@ -1,9 +1,11 @@
+# Prefer fixing the text over adding an exception. A word spelled that way on
+# purpose goes in [default.extend-words], with a comment saying why.
 [files]
 extend-exclude = [
   # Generated file. A typo in a package name is upstream's, and rewriting it
   # here would invalidate the lockfile.
   "pnpm-lock.yaml",
-  # Generated build/doc output, matching the same paths in .gitignore,
+  # Generated build output, matching the same paths in .gitignore,
   # eslint.config.mjs's globalIgnores, and .prettierignore.
   "dist/",
   "coverage/",
