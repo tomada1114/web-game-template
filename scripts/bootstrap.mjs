@@ -971,13 +971,15 @@ function gitQuery(root, args) {
  * Render `.template-origin` for the repository at `root`.
  *
  * @param {string} root
+ * @param {string} [rootCommit] - The root commit a full clone of the template
+ *   starts from; only tests pass another.
  * @returns {string}
  *
  * @remarks
  * Outside a git work tree whose top level is `root` (a plain copy, or a
  * directory nested in some other repository), commit and tree are `unknown`.
  */
-export function templateOrigin(root) {
+export function templateOrigin(root, rootCommit = TEMPLATE_ROOT_COMMIT) {
   let commit = "unknown";
   let tree = "unknown";
   const topLevel = gitQuery(root, ["rev-parse", "--show-toplevel"]);
@@ -987,7 +989,7 @@ export function templateOrigin(root) {
     const roots = (gitQuery(root, ["rev-list", "--max-parents=0", "HEAD"]) ?? "").split(
       "\n",
     );
-    if (shallow === "false" && roots.includes(TEMPLATE_ROOT_COMMIT)) {
+    if (shallow === "false" && roots.includes(rootCommit)) {
       commit = gitQuery(root, ["rev-parse", "HEAD"]) ?? "unknown";
     }
   }
@@ -1137,11 +1139,11 @@ function transform(root, options, year, origin, preview) {
 }
 
 /**
- * Refuse a second run and validate the source package shape.
+ * Refuse a second run in a repository that carries `.template-origin`.
  *
  * @param {string} root
  */
-function assertTemplate(root) {
+function assertNotBootstrapped(root) {
   if (existsSync(path.join(root, ORIGIN_FILE))) {
     throw new BootstrapError(
       "ERR_ALREADY_BOOTSTRAPPED",
@@ -1149,6 +1151,15 @@ function assertTemplate(root) {
         "Next: nothing to run; the bootstrap runs once per repository.",
     );
   }
+}
+
+/**
+ * Refuse a second run and validate the source package shape.
+ *
+ * @param {string} root
+ */
+function assertTemplate(root) {
+  assertNotBootstrapped(root);
   const manifest = readObject(path.join(root, "package.json"));
   const currentName = readString(manifest, "name");
   if (currentName !== TEMPLATE_PACKAGE) {
@@ -1291,6 +1302,8 @@ export async function main(argv) {
     return 0;
   }
   try {
+    // Before any prompt, so a rerun stops before asking for input it would discard.
+    assertNotBootstrapped(process.cwd());
     const options =
       argv.length === 0 ? await interactiveArguments() : parseArguments(argv);
     const changed = bootstrap(process.cwd(), options);

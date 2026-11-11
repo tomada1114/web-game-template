@@ -1083,19 +1083,28 @@ describe("the template origin record", () => {
   });
 
   it("records the commit of a full clone of the template, and not of a shallow one", () => {
+    // A small fixture history stands in for the template, so the test does not
+    // depend on how deep this checkout's own history is (CI clones depth 1).
     const workspace = mkdtempSync(path.join(tmpdir(), "typescript-template-clone-"));
     workspaces.push(workspace);
-    const source = `file://${repoRoot}`;
-    git(workspace, "clone", "--quiet", "--no-hardlinks", source, "full");
-    git(workspace, "clone", "--quiet", "--depth=1", source, "shallow");
+    const source = path.join(workspace, "source");
+    mkdirSync(source);
+    writeFileSync(path.join(source, "a.txt"), "one\n");
+    commitAll(source);
+    writeFileSync(path.join(source, "a.txt"), "two\n");
+    commitAll(source);
+    const rootCommit = git(source, "rev-list", "--max-parents=0", "HEAD");
+    git(workspace, "clone", "--quiet", `file://${source}`, "full");
+    git(workspace, "clone", "--quiet", "--depth=1", `file://${source}`, "shallow");
     const full = path.join(workspace, "full");
     const shallow = path.join(workspace, "shallow");
 
-    expect(templateOrigin(full)).toContain(
+    expect(templateOrigin(full, rootCommit)).toContain(
       `commit: ${git(full, "rev-parse", "HEAD")}\n`,
     );
-    expect(templateOrigin(shallow)).toContain("commit: unknown\n");
-    expect(templateOrigin(shallow)).toContain(
+    expect(templateOrigin(full)).toContain("commit: unknown\n");
+    expect(templateOrigin(shallow, rootCommit)).toContain("commit: unknown\n");
+    expect(templateOrigin(shallow, rootCommit)).toContain(
       `tree: ${git(shallow, "rev-parse", "HEAD^{tree}")}\n`,
     );
   });
@@ -1181,6 +1190,20 @@ describe("main", () => {
     expect(out.some((line) => line.startsWith("- "))).toBe(true);
     expect(out.at(-1)).toBe("No repository files were changed.");
     expect(readFileSync(path.join(root, "package.json"), "utf8")).toBe(before);
+  });
+
+  it("refuses a rerun before prompting or parsing arguments", async () => {
+    const root = copyTemplate();
+    writeFileSync(path.join(root, ORIGIN_FILE), "template: earlier\n");
+    vi.spyOn(process, "cwd").mockReturnValue(root);
+    const { err } = captureConsole();
+    // No arguments would start the interactive prompts; an invalid slug would
+    // fail parsing. Both must yield to the origin record.
+    await expect(main([])).resolves.toBe(2);
+    await expect(main(["Uppercase"])).resolves.toBe(2);
+    expect(
+      err.filter((line) => line.includes("ERR_ALREADY_BOOTSTRAPPED")),
+    ).toHaveLength(2);
   });
 
   it("reports a real run and the next command", async () => {
