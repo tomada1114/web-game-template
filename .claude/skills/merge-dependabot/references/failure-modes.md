@@ -21,8 +21,8 @@ error. The PR bumps one package, and the name in the error is a different one.
 **Cause:** `pnpm-workspace.yaml` sets `strictPeerDependencies: true`, so an unmet or
 conflicting peer range is a hard failure rather than a warning. The standing example is
 `typescript`: `typescript-eslint` caps its peer support below the current major
-(`managing-dependencies` has the ceiling; `package.json` has the range). A PR proposing
-the next major fails here and is **correct to fail**.
+(`.claude/rules/dependencies.md` has the ceiling; `package.json` has the range). A PR
+proposing the next major fails here and is **correct to fail**.
 
 **Fix:** hold the PR. Raising this ceiling is a coordinated multi-package upgrade — both
 `typescript` and `typescript-eslint` at once — not a routine bump. Never add an override
@@ -53,7 +53,7 @@ version named in the error was published recently (see `pnpm-workspace.yaml`'s
 **Cause:** the `minimumReleaseAge` cooldown in `pnpm-workspace.yaml`, mirrored by
 `.github/dependabot.yml`'s `cooldown`, so this normally cannot happen — except for
 **security updates**, which Dependabot exempts from its own cooldown.
-`managing-dependencies` owns the cooldown and its exception process.
+`.claude/rules/dependencies.md` owns the cooldown and its exception process.
 
 **Fix:** this is the one case where the tension is real: a security fix you want now
 against a cooldown that exists to catch a compromised release. Report the advisory, the
@@ -78,7 +78,7 @@ wants. Never silence it with `@ts-expect-error` or an `eslint-disable` to land t
 ## F5 — Test or coverage failure
 
 **Symptom:** lint and types pass; `pnpm run test:coverage` fails, or coverage drops
-below one of the floors in `vitest.config.ts` (see `placing-tests`).
+below one of the floors in `vitest.config.ts` (see `.claude/rules/tests.md`).
 
 **Fix:** this is a real signal. Read the failure. Hold the PR and report it — do not
 chase coverage by editing tests to accommodate a dependency you have not decided to
@@ -125,5 +125,6 @@ formality:
   `.github/workflows/` is changing _what_ runs rather than _which version_ runs, and
   deserves a closer read.
 - Never let a bump relax a `pnpm-workspace.yaml` supply-chain setting or add an
-  `allowBuilds` entry to make an install succeed — see `managing-dependencies` for what
-  each setting closes off. Each is a supply-chain decision, not a merge conflict.
+  `allowBuilds` entry to make an install succeed — see `.claude/rules/dependencies.md`
+  for what each setting closes off. Each is a supply-chain decision, not a merge
+  conflict.

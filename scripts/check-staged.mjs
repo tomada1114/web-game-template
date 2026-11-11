@@ -15,7 +15,7 @@
 // have a reason to fire on work someone meant to do.
 //
 // This script sees what actually reaches `git commit`, from any author — a
-// human, Codex, or any other tool. Two rules are deliberately not folded in
+// human, an agent, or any other tool. Two rules are deliberately not folded in
 // here, because a git diff cannot express them:
 //
 //   - Lockfile hand-editing. A regenerated lockfile (`pnpm install`) is an
@@ -26,7 +26,7 @@
 //     dispatch leave nothing in a diff for this script to see. `--no-verify`
 //     in particular disables this script along with the rest of the git hook
 //     chain, so no git hook can catch it. These stay as instructions in
-//     AGENTS.md rather than an enforced block — see its "Enforcement layers".
+//     CLAUDE.md rather than an enforced block — see `.claude/rules/gates.md`.
 //
 // Exit codes:
 //   0  every staged change is safe to commit

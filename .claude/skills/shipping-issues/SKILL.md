@@ -10,8 +10,8 @@ description: >
 # Shipping Issues
 
 **Owns:** shipping explicitly requested issues through verified PRs and merges. **Does
-not own:** issue vocabulary (`triaging-issues`), release consequences
-(`releasing-builds`), or landing dependency bot PRs (`merge-dependabot`).
+not own:** issue vocabulary (`triaging-issues`) or landing dependency bot PRs
+(`merge-dependabot`).
 
 Completion requires a merged PR on the default branch, the linked issue closed, and the
 required gates preserved. Record the remote-write scope authorized in the current
@@ -20,10 +20,9 @@ covers its in-scope labels, branches, pushes, PRs, follow-up issues, design comm
 and merges; a request to create only a PR stops at the PR. Reading this skill during
 analysis supplies no authorization. Green CI proves readiness within that scope.
 
-**REQUIRED:** `triaging-issues` when changing issue labels; `releasing-builds` for every
-PR body. In Codex, load `managing-git-github-workflows` first and use the connected
-GitHub integration for supported remote operations. Bundled scripts using `gh` are a
-fallback when the integration cannot perform the operation.
+**REQUIRED:** `triaging-issues` when changing issue labels. Every PR body carries the
+release line from the pull request template. Remote GitHub operations go through the
+bundled scripts, which use `gh`.
 
 ## Modes and working rules
 
@@ -41,9 +40,8 @@ fallback when the integration cannot perform the operation.
   action is denied; do not replace it with another spelling or move.
 - Every command runs with its working directory set to the intended checkout. Use
   `git <subcommand>` there, and preserve hooks.
-- Resolve the bundled scripts relative to the directory containing this loaded SKILL.md.
-  References that use `CLAUDE_SKILL_DIR` assume Claude Code; on another host substitute
-  that resolved skill directory.
+- Resolve the bundled scripts relative to the directory containing this loaded SKILL.md
+  (`CLAUDE_SKILL_DIR` in the references).
 
 ## Workflow
 
@@ -112,13 +110,13 @@ a released public contract real consumers use) or the user asked; never `low`, `
 [cost-discipline.md#code-review-effort](references/cost-discipline.md#code-review-effort).
 
 **`--fix` is serial-mode only** — in parallel mode it would write into the main
-checkout. There, review without it and spawn one `sonnet` sub-agent per branch with
+checkout. There, review without it and spawn one `executor` sub-agent per branch with
 accepted findings, all in one message, from
 [review-fix.md](references/agents/review-fix.md), numbering the findings `F1`, `F2`, …
 so the returned `APPLIED`/`REJECTED` lines match back
 ([why](references/recovery.md#--fix-and-why-it-is-serial-mode-only)).
 
-Only when the host cannot launch `/code-review` (or under Codex CLI), use
+Only when the host cannot launch `/code-review`, use
 [review-fallback.md](references/agents/review-fallback.md): a read-only, fresh-context
 review of the branch diff. Check that the reviewer actually read test and gate changes
 before accepting an empty report. Triage every finding against the issue scope, inspect

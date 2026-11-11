@@ -168,7 +168,7 @@ describe("InvalidInputError", () => {
 
 // --- the error-code convention -----------------------------------------------
 //
-// "Naming and constants" in AGENTS.md fixes the shape of every published error:
+// "Errors" in `.claude/rules/typescript.md` fixes the shape of every published error:
 // a `name` a reader recognises in a stack trace, and an `ERR_`-prefixed `code`
 // a caller is invited to branch on. Reading the classes off the module's own
 // exports is what makes that a rule instead of two assertions about two
@@ -204,7 +204,7 @@ const representativeErrors: Record<string, Error> = {
   TimeoutError: new TimeoutError(25),
 };
 
-/** The code shape AGENTS.md fixes: `ERR_` plus SCREAMING_SNAKE_CASE. */
+/** The code shape `.claude/rules/typescript.md` fixes: `ERR_` plus SCREAMING_SNAKE_CASE. */
 const ERROR_CODE = /^ERR_[A-Z0-9_]+$/;
 
 function codeOf(error: Error): unknown {

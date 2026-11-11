@@ -1,27 +1,28 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-// A malformed skill is the one failure no other gate can see. `pnpm
-// agents:check` compares two trees byte-for-byte, Prettier formats the file
-// and `typos` spell-checks it, so a SKILL.md whose `name` disagrees with its
-// directory — or whose frontmatter does not parse at all — mirrors cleanly,
-// passes every check, and simply never loads in Claude Code or Codex CLI.
-// Nothing reports it; the skill is just silently absent.
+import { isolatedGitEnv } from "../scripts/lib/git-env.mjs";
+
+// A malformed skill or rule is the one failure no other gate can see.
+// Prettier formats the file and `typos` spell-checks it, so a SKILL.md whose
+// `name` disagrees with its directory — or a rule whose `paths` glob matches
+// nothing — passes every check and simply never loads in Claude Code.
+// Nothing reports it; the guidance is just silently absent.
 //
 // The frontmatter this repository writes is deliberately small (two keys, one
 // of them a folded block scalar), so it is parsed here rather than by adding a
 // YAML dependency for a file format the repository itself controls.
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
-const skillsDirectory = path.join(repoRoot, ".agents", "skills");
-const agentsMdPath = path.join(repoRoot, "AGENTS.md");
+const skillsDirectory = path.join(repoRoot, ".claude", "skills");
+const rulesDirectory = path.join(repoRoot, ".claude", "rules");
 
 /**
  * The frontmatter keys a skill in this repository may declare. Claude Code
- * accepts a wider set and Codex CLI documents only these two, so the
- * intersection is what both hosts are guaranteed to honour.
+ * accepts a wider set; this repository keeps to these two.
  */
 const ALLOWED_KEYS = ["name", "description"] as const;
 
@@ -86,7 +87,7 @@ function parseFrontmatter(source: string): Record<string, string> {
       // nesting a mapping inside the value and rejects the line. Every skill
       // in this repository writes its description as a folded block scalar
       // for exactly this reason: a plain scalar that happened to work here
-      // still breaks Codex CLI's real YAML loader (openai/codex#8609).
+      // still breaks a real YAML loader (see openai/codex#8609).
       if (/:[ \t]/u.test(rawValue)) {
         throw new Error(
           `frontmatter value for "${key}" is a plain scalar containing an unquoted ": ", which is not valid YAML: ${line}`,
@@ -105,37 +106,77 @@ function parseFrontmatter(source: string): Record<string, string> {
 }
 
 /**
- * Extract the skill names named by AGENTS.md's "## Skills" routing table.
+ * Read the `paths:` list from a rule file's frontmatter.
  *
- * The table's first column holds a backticked skill name; every other cell,
- * and the row's surrounding prose, is free to change without affecting this
- * parse — only the backticked names in that section are read.
+ * Supports the one shape this repository writes: `paths:` followed by
+ * `  - "glob"` items, each a double-quoted string.
  *
- * @param {string} source - The full contents of AGENTS.md.
- * @returns {string[]} Every backticked name in the first column of a row
- *   under the "## Skills" heading, in document order.
- * @throws {Error} When AGENTS.md has no `## Skills` heading.
+ * @param {string} source - The full contents of a `.claude/rules/*.md` file.
+ * @returns {string[]} The declared globs, in order.
+ * @throws {Error} When the frontmatter is missing or unclosed, or a line
+ *   inside it is not `paths:` or a quoted list item.
  */
-function listRoutingTableSkillNames(source: string): string[] {
+function parseRulePaths(source: string): string[] {
   const lines = source.split("\n");
-  const headingIndex = lines.indexOf("## Skills");
-  if (headingIndex === -1) {
-    throw new Error('AGENTS.md has no "## Skills" heading');
+  if (lines[0] !== "---") {
+    throw new Error("rule does not open with a `---` frontmatter delimiter");
   }
-  const nextHeadingIndex = lines.findIndex(
-    (line, index) => index > headingIndex && /^##[ \t]/u.test(line),
-  );
-  const section = lines.slice(
-    headingIndex + 1,
-    nextHeadingIndex === -1 ? undefined : nextHeadingIndex,
-  );
+  const end = lines.indexOf("---", 1);
+  if (end === -1) {
+    throw new Error("rule frontmatter is never closed by a `---` delimiter");
+  }
+  const globs: string[] = [];
+  let inPaths = false;
+  for (const line of lines.slice(1, end)) {
+    if (line.trim() === "") continue;
+    if (line === "paths:") {
+      inPaths = true;
+      continue;
+    }
+    const item = /^[ \t]+-[ \t]+"([^"]+)"[ \t]*$/u.exec(line);
+    if (inPaths && item) {
+      globs.push(item[1] ?? "");
+      continue;
+    }
+    throw new Error(`rule frontmatter line is not a quoted paths item: ${line}`);
+  }
+  return globs;
+}
 
-  const names: string[] = [];
-  for (const line of section) {
-    const row = /^\|\s*`([^`]+)`\s*\|/u.exec(line);
-    if (row) names.push(row[1] ?? "");
+/**
+ * Every file git would ship: tracked plus non-ignored untracked. Outside a git
+ * repository (the bootstrap end-to-end copy is a plain directory), falls back
+ * to a walk that skips installed and generated output.
+ */
+function listRepositoryFiles(): string[] {
+  const result = spawnSync(
+    "git",
+    ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+    { cwd: repoRoot, encoding: "utf8", timeout: 30_000, env: isolatedGitEnv() },
+  );
+  if (result.status !== 0) {
+    if (result.stderr.includes("not a git repository")) {
+      return walkRepository();
+    }
+    throw new Error(`git ls-files failed: ${result.stderr}`);
   }
-  return names;
+  return result.stdout.split("\0").filter(Boolean);
+}
+
+const WALK_SKIP = new Set([".git", "node_modules", "dist", "coverage"]);
+
+function walkRepository(): string[] {
+  const found: string[] = [];
+  const walk = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (WALK_SKIP.has(entry.name)) continue;
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) walk(absolute);
+      else found.push(path.relative(repoRoot, absolute).replace(/\\/gu, "/"));
+    }
+  };
+  walk(repoRoot);
+  return found;
 }
 
 function readSkill(name: string): Record<string, string> {
@@ -160,11 +201,11 @@ function listSkillFiles(name: string): string[] {
 }
 
 const skillNames = listSkillNames();
-const routingTableSkillNames = listRoutingTableSkillNames(
-  readFileSync(agentsMdPath, "utf8"),
-);
+const ruleNames = readdirSync(rulesDirectory)
+  .filter((name) => name.endsWith(".md"))
+  .sort();
 
-describe("the authored skill tree", () => {
+describe("the skill tree", () => {
   it("holds at least one skill", () => {
     expect(skillNames.length).toBeGreaterThan(0);
   });
@@ -177,11 +218,11 @@ describe("the authored skill tree", () => {
     expect(readSkill(name)["name"]).toBe(name);
   });
 
-  it.each(skillNames)("declares only the dual-host keys in %s", (name) => {
+  it.each(skillNames)("declares only name and description in %s", (name) => {
     expect(Object.keys(readSkill(name)).sort()).toEqual([...ALLOWED_KEYS].sort());
   });
 
-  it.each(skillNames)("gives %s a description both hosts can match on", (name) => {
+  it.each(skillNames)("gives %s a description Claude Code can match on", (name) => {
     const description = readSkill(name)["description"] ?? "";
     expect(description).not.toBe("");
     expect(description.length).toBeLessThanOrEqual(DESCRIPTION_LIMIT);
@@ -199,21 +240,59 @@ describe("the authored skill tree", () => {
   });
 });
 
-describe("AGENTS.md's Skills routing table", () => {
-  // The table is the only place an agent learns a skill exists at all; a
-  // skill missing from it never gets loaded, and a stale row that survives a
-  // rename or deletion sends an agent to a directory that is no longer there.
+describe("the path-scoped rules", () => {
+  // A rule loads only when a file matching one of its globs is read, so a
+  // glob that matches nothing silently disables the rule.
+  const repositoryFiles = listRepositoryFiles();
 
-  it.each(skillNames)("gives %s a row in the routing table", (name) => {
-    expect(routingTableSkillNames).toContain(name);
+  it("holds at least one rule", () => {
+    expect(ruleNames.length).toBeGreaterThan(0);
   });
 
-  it.each(routingTableSkillNames)(
-    "names %s after an existing skill directory",
+  it.each(ruleNames)("gives %s a non-empty paths list", (name) => {
+    const globs = parseRulePaths(readFileSync(path.join(rulesDirectory, name), "utf8"));
+    expect(globs.length).toBeGreaterThan(0);
+  });
+
+  it.each(ruleNames)(
+    "matches at least one repository file with each glob in %s",
     (name) => {
-      expect(skillNames).toContain(name);
+      const globs = parseRulePaths(
+        readFileSync(path.join(rulesDirectory, name), "utf8"),
+      );
+      for (const glob of globs) {
+        expect(
+          repositoryFiles.some((file) => path.matchesGlob(file, glob)),
+          `${name}: ${glob} matches no file`,
+        ).toBe(true);
+      }
     },
   );
+});
+
+describe("parseRulePaths", () => {
+  it("reads quoted list items", () => {
+    expect(parseRulePaths('---\npaths:\n  - "src/**/*.ts"\n  - "a.md"\n---\n')).toEqual(
+      ["src/**/*.ts", "a.md"],
+    );
+  });
+
+  it("rejects a file with no frontmatter", () => {
+    expect(() => parseRulePaths("# Rule\n")).toThrow(/frontmatter delimiter/u);
+  });
+
+  it("rejects frontmatter that is never closed", () => {
+    expect(() => parseRulePaths('---\npaths:\n  - "a"\n')).toThrow(/never closed/u);
+  });
+
+  it("rejects an unquoted item or another key", () => {
+    expect(() => parseRulePaths("---\npaths:\n  - a\n---\n")).toThrow(/quoted paths/u);
+    expect(() => parseRulePaths("---\nname: x\n---\n")).toThrow(/quoted paths/u);
+  });
+
+  it("rejects a list item before the paths key", () => {
+    expect(() => parseRulePaths('---\n  - "a"\n---\n')).toThrow(/quoted paths/u);
+  });
 });
 
 describe("parseFrontmatter", () => {

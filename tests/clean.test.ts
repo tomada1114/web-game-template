@@ -14,8 +14,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { clean } from "../scripts/clean.mjs";
 
-// scripts/clean.mjs imports `console` from "node:console" (AGENTS.md's
-// "Repository automation" convention), which is a distinct object from the
+// scripts/clean.mjs imports `console` from "node:console" (a
+// `.claude/rules/scripts.md` convention), which is a distinct object from the
 // ambient global under Vitest, so the spy has to target the same module —
 // see tests/sync-labels.test.ts for the established pattern.
 

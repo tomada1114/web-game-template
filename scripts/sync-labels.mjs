@@ -40,7 +40,7 @@ const MANIFEST_PATH = ".github/labels.yml";
 
 /**
  * A function able to run `gh`. Tests pass an in-memory fake instead of
- * mocking `node:child_process`, following the `writing-tests` skill
+ * mocking `node:child_process`, following `.claude/rules/tests.md`
  * ("prefer a real in-memory fake to a mock").
  *
  * @typedef {(args: readonly string[]) => GhResult} GhRunner

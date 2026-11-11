@@ -10,7 +10,7 @@ import { parseLabelManifest } from "../scripts/lib/labels-manifest.mjs";
 // repository's label taxonomy (the `triaging-issues` skill).
 // This is a static, filesystem-only check: a form or the release manifest
 // must not be able to name a label the manifest does not declare, so GitHub
-// does not silently drop it (AGENTS.md warns about exactly that).
+// does not silently drop it (the `triaging-issues` skill warns about exactly that).
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 const githubDir = path.join(repoRoot, ".github");

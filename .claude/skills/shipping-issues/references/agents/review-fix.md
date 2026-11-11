@@ -1,8 +1,8 @@
 # Review fix, parallel mode (sub-agent prompt)
 
 Spawned at [SKILL.md step 4](../../SKILL.md#4-review-the-branch) in parallel mode — only
-for findings this session has already read and accepted, one **`sonnet`** sub-agent per
-branch that has any.
+for findings this session has already read and accepted, one **`executor`** sub-agent
+per branch that has any.
 
 `/code-review --fix` writes to the session's own working tree, which in parallel mode is
 the main checkout sitting on the default branch — the wrong tree — so the review runs
@@ -30,7 +30,7 @@ That read is the ONLY GitHub command you are permitted to run.
 matters`. Findings I rejected are not listed here and must not be inferred.}
 </findings>
 
-Project conventions: read {workdir}/CLAUDE.md and {workdir}/AGENTS.md before
+Project conventions: read {workdir}/CLAUDE.md before
 changing anything.
 Verification command: {verify_command}
 

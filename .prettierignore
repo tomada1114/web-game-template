@@ -11,9 +11,5 @@ tests/fixtures/
 pnpm-lock.yaml
 CHANGELOG.md
 
-# Generated mirror of .agents/skills/ (`pnpm agents:sync`); the real files are
-# formatted at their real path, and reformatting the copy would only drift it.
-.claude/skills/
-
 # Full working copies created by agent sessions; formatted in their own checkout.
 .claude/worktrees/

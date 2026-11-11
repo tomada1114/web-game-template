@@ -15,8 +15,8 @@ updates:
     open-pull-requests-limit: 10
     # A TypeScript major is not installable here: typescript-eslint caps its
     # peer range below it, and `strictPeerDependencies: true` turns
-    # that into a failed install rather than a warning. See "TypeScript version
-    # ceiling" in AGENTS.md. Remove this entry once typescript-eslint publishes
+    # that into a failed install rather than a warning. See "The TypeScript
+    # ceiling" in .claude/rules/dependencies.md. Remove this entry once typescript-eslint publishes
     # a peer range that admits the next major.
     ignore:
       - dependency-name: "typescript"
