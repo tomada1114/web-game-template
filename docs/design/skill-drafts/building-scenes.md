@@ -5,9 +5,9 @@ description: >
   (BootScene, TitleScene, PlayScene, ResultScene): a Phaser 4 API such as Phaser.Game, a
   Scene, Scale.FIT, a tween, pointer or keyboard input; drawing the board from core
   State; the keyboard cursor and focus; scene transitions and start data; the Copy
-  result fallback; document.body.dataset.ready or the #debug-moves mirror the e2e smoke
-  test reads; a Phaser 3 API that no longer type-checks; or a scene that holds rule
-  logic or mutates state.
+  result fallback; document.body.dataset.ready, document.body.dataset.scene, or the
+  #debug-moves mirror the e2e smoke test reads; a Phaser 3 API that no longer
+  type-checks; or a scene that holds rule logic or mutates state.
 ---
 
 # Building Scenes
@@ -105,9 +105,9 @@ changing a scene. This skill holds the judgment they leave to the code.
 
 - `document.body.dataset.ready = "true"` is set when Title accepts input — not when Boot
   ends, and not before the first frame Title can be clicked.
-- `document.body.dataset.scene = "play"` is set at the end of Play's `create()`, once
-  its key listener exists, and deleted when Play is left (Back, Escape, or the finish
-  that goes to Result).
+- `document.body.dataset.scene = "play"` is set in Play's `create()` right after its key
+  listener is registered, and deleted when the board ends (solved or out of moves, when
+  keys stop counting) or when the scene shuts down.
 - `#debug-moves` holds the integer move count as text. It is present in every build,
   `aria-hidden="true"` and visually hidden. Update it in the same place the on-canvas
   counter is updated, so the two cannot drift.

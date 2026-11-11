@@ -114,10 +114,13 @@ export class PlayScene extends Phaser.Scene {
     this.input.keyboard?.on("keydown", (event: KeyboardEvent) => {
       this.onKey(event);
     });
+    document.body.dataset["scene"] = "play";
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      delete document.body.dataset["scene"];
+    });
 
     this.draw();
     this.platform.gameplayStart();
-    document.body.dataset["scene"] = "play";
   }
 
   private onKey(event: KeyboardEvent): void {
@@ -158,6 +161,7 @@ export class PlayScene extends Phaser.Scene {
       }
     });
     if (core.isOver(this.state)) {
+      delete document.body.dataset["scene"];
       const finished = this.state;
       this.time.delayedCall(layout.resultPauseMs, () => {
         this.finish(finished);
@@ -194,7 +198,6 @@ export class PlayScene extends Phaser.Scene {
   private finish(finished: core.State): void {
     if (this.leaving) return;
     this.leaving = true;
-    delete document.body.dataset["scene"];
     this.platform.gameplayStop();
     fadeTo(this, SceneKey.result, {
       seed: finished.seed,
@@ -208,7 +211,6 @@ export class PlayScene extends Phaser.Scene {
   private back(): void {
     if (this.leaving) return;
     this.leaving = true;
-    delete document.body.dataset["scene"];
     this.platform.gameplayStop();
     fadeTo(this, SceneKey.title);
   }
