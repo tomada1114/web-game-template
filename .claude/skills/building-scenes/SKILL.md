@@ -17,7 +17,7 @@ description: >
 not own:** the rules and the shape of `State` (`writing-game-core`); when a platform
 event fires, storage, and the portal's page rules (`integrating-portals`); colour, type,
 size, and motion values (`designing-ui`); where the smoke test lives and how it runs
-(`placing-tests`).
+(`.claude/rules/tests.md`).
 
 Screens and the flow between them are in `docs/product/ux-flows.md`; app-wide input,
 feedback, and error rules are in `docs/design/ux-guidelines.md`. Read both before
@@ -131,7 +131,7 @@ changing a scene. This skill holds the judgment they leave to the code.
 
 - The game depends on `phaser@^4`: 4.0.0 was released 2026-04-10 and 4.2.1 on 2026-07-09
   (https://registry.npmjs.org/phaser, checked 2026-11-05). Adding or bumping it follows
-  the release-age policy. **REQUIRED:** `managing-dependencies`.
+  the release-age policy in `.claude/rules/dependencies.md`.
 - Phaser 4 is a new major version, and habits — an agent's included — lean on Phaser 3
   APIs. Before using a Phaser API, look it up in the current documentation: a
   documentation lookup tool such as context7 where available, else

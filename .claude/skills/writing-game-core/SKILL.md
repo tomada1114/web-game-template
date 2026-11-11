@@ -16,10 +16,10 @@ description: >
 API and state shape, replay and `RULES_VERSION`, why the determinism guard exists, the
 golden and property tests, and the sample ruleset. **Does not own:** rendering, input,
 and where the clock or randomness is read (`building-scenes`); storage and portal calls
-(`integrating-portals`); editing the lint block itself (`changing-gates`); the PR's
-`Rules version:` line (`releasing-builds`); the shape of an error class
-(`designing-errors`); type-system judgment (`writing-typescript`); where a test file
-goes and its coverage floor (`placing-tests`).
+(`integrating-portals`); editing the lint block itself (`.claude/rules/gates.md`); the
+PR's `Rules version:` line (`releasing-builds`); the shape of an error class and
+type-system judgment (`.claude/rules/typescript.md`); where a test file goes and its
+coverage floor (`.claude/rules/tests.md`).
 
 The constraint every rule here follows: the same seed and the same list of moves give
 the same state and score on every JavaScript engine — V8, JavaScriptCore, SpiderMonkey.
@@ -67,8 +67,8 @@ enters core as a plain value.
 - `config` holds the ruleset's parameters as plain JSON and travels in the replay
   record, so a run is reproduced with the parameters it was played under.
 - `isOver` and `score` are functions of `State` alone.
-- A new error type or code: **REQUIRED:** `designing-errors`. Type-level choices:
-  **REQUIRED:** `writing-typescript`.
+- A new error type or code, and type-level choices, follow the conventions in
+  `.claude/rules/typescript.md`.
 
 ## Replay and rules version
 
@@ -141,8 +141,8 @@ core is a weakened gate (`CLAUDE.md`); a change to the block itself follows
 - Golden tests run on Node; the lint guard stands in for the other engines. A golden
   value that ever differs between Node and a browser means the guard has a hole — report
   it rather than special-casing the engine.
-- File location and floors: **REQUIRED:** `placing-tests`. Test-body conventions:
-  **BACKGROUND:** `writing-tests`.
+- File location, floors, and test-body conventions: the conventions in
+  `.claude/rules/tests.md`.
 
 ## The sample ruleset
 
