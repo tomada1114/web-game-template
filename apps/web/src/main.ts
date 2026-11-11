@@ -1,5 +1,6 @@
 import * as Phaser from "phaser";
 
+import { createSessionDay } from "./daily/daily.js";
 import { selectPlatform } from "./platform/select.js";
 import { BootScene } from "./scenes/BootScene.js";
 import { PlayScene } from "./scenes/PlayScene.js";
@@ -25,8 +26,11 @@ new Phaser.Game({
   },
   scene: [
     new BootScene(platform),
-    new TitleScene(platform),
+    new TitleScene(
+      platform,
+      createSessionDay(() => new Date()),
+    ),
     new PlayScene(platform),
-    new ResultScene(),
+    new ResultScene(platform),
   ],
 });

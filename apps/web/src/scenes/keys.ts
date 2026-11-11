@@ -6,16 +6,23 @@ export const SceneKey = {
   result: "result",
 } as const;
 
-/** Start data for Play: the seed of the board to play. */
-export interface PlayData {
-  readonly seed: number;
-}
+/**
+ * Start data for Play: a Practice board's seed, or the session's UTC day of the
+ * daily board, whose seed Play derives from the day.
+ */
+export type PlayData = { readonly seed: number } | { readonly day: string };
 
-/** Start data for Result: the finished state's seed and the outcome lines. */
+/** Start data for Result: the finished state's seed and its outcome. */
 export interface ResultData {
   readonly seed: number;
-  readonly headline: string;
-  readonly score: string;
+  /** The session's UTC day when this was the daily board; absent for Practice. */
+  readonly day?: string;
+  /** The numeric score, 0 when unsolved. */
+  readonly points: number;
+  /** The moves played. */
+  readonly movesUsed: number;
+  /** The board's move limit, which is also its highest score. */
+  readonly limit: number;
 }
 
 /** A fresh Practice seed; randomness stays in `apps/web` and enters core as a value. */

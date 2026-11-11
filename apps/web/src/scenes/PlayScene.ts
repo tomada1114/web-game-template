@@ -2,6 +2,7 @@ import * as Phaser from "phaser";
 
 import * as core from "@my-game/core";
 
+import { GAME_SLUG } from "../game-info.js";
 import { type Platform } from "../platform/platform.js";
 import { colors, layout, motion, radius, space, type } from "../theme/tokens.js";
 import {
@@ -10,7 +11,6 @@ import {
   cellCenter,
   isActivation,
   moveCursor,
-  resultLines,
   toView,
   type Direction,
 } from "../view/board-view.js";
@@ -51,6 +51,7 @@ export class PlayScene extends Phaser.Scene {
   private ring!: FocusRing;
   private mirror: HTMLElement | null = null;
   private leaving = false;
+  private day: string | undefined;
 
   private readonly platform: Platform;
 
@@ -60,11 +61,13 @@ export class PlayScene extends Phaser.Scene {
   }
 
   init(data: PlayData): void {
-    this.state = core.createGame(data.seed, core.SAMPLE_CONFIG);
+    const seed = "day" in data ? core.dailySeed(data.day, GAME_SLUG) : data.seed;
+    this.state = core.createGame(seed, core.SAMPLE_CONFIG);
     this.moves.length = 0;
     this.tiles = [];
     this.cursor = CURSOR_START;
     this.leaving = false;
+    this.day = "day" in data ? data.day : undefined;
   }
 
   create(): void {
@@ -191,11 +194,12 @@ export class PlayScene extends Phaser.Scene {
     if (this.leaving) return;
     this.leaving = true;
     this.platform.gameplayStop();
-    const lines = resultLines(finished);
     fadeTo(this, SceneKey.result, {
       seed: finished.seed,
-      headline: lines.headline,
-      score: lines.score,
+      ...(this.day === undefined ? {} : { day: this.day }),
+      points: core.score(finished),
+      movesUsed: finished.movesUsed,
+      limit: finished.limit,
     } satisfies ResultData);
   }
 
