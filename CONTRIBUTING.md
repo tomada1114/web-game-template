@@ -1,26 +1,45 @@
 # Contributing
 
-## Setup
+## Prerequisites
 
-Use Node.js 24 and pnpm 11 through Corepack:
+- Node.js 24 (`.node-version`). `devEngines.runtime.onFail` is an intentional hard
+  error; do not weaken it.
+- pnpm 11 through Corepack, which ships with Node.js. `package.json`'s `packageManager`
+  pins the exact version, and pnpm is the only package manager used here.
+- Git. `pnpm hooks:install` installs the pre-commit hook, and the hook is required: it
+  carries the check that refuses a commit staging a secret.
 
 ```sh
-node --version
+node --version   # must report v24.x
 corepack enable
 corepack pnpm@11.18.0 install --frozen-lockfile
 pnpm hooks:install
 pnpm check
 ```
 
-The first command must report Node 24.x. `devEngines.runtime.onFail` is an intentional
-hard error; do not weaken it.
+## Development Workflow
 
-Useful focused commands are `pnpm check:quick`, `pnpm test`, `pnpm test:coverage`, and
-`pnpm build`.
+```sh
+pnpm dev             # Vite's dev server for apps/web; runs until stopped
+pnpm check:quick     # format check, lint, typecheck, tests: the everyday gate
+pnpm check           # the full gate: the checks above with coverage, then the build
+pnpm fix             # ESLint autofix, then Prettier
+pnpm test            # every test once
+pnpm test:coverage   # tests with the coverage thresholds enforced
+pnpm typecheck       # tsc -b over every workspace program
+pnpm build           # build apps/web into apps/web/dist
+```
+
+Run one Vitest project with `pnpm exec vitest run --project core` (or `web`, `unit`,
+`automation`), or one file with `pnpm exec vitest run <path>`. CI and the pre-commit
+hook call these same scripts and define no check of their own.
+
+A behavior change lands with its test in the same commit, and the test is written first:
+a test that has never failed has not shown that it can.
 
 <!-- template-only:start -->
 
-## Bootstrap
+### Bootstrap
 
 `scripts/bootstrap.mjs` renames the template for a generated repository, once. Use
 `pnpm bootstrap:e2e` for a fast transformation check. Before changing the template's
@@ -29,7 +48,7 @@ frozen lockfile, and runs its full gate. A failed generated repository is retain
 the reported temporary directory.
 <!-- template-only:end -->
 
-## Dependency cooldown
+### Dependency cooldown
 
 The seven-day dependency cooldown in `pnpm-workspace.yaml` is fail-closed. If an urgent
 security fix is younger than seven days, a maintainer may add the exact package and
@@ -37,8 +56,43 @@ version to `minimumReleaseAgeExclude` in the same reviewed PR as the lockfile up
 Record the advisory and why waiting is riskier, remove the exception after the version
 ages out, and never use a broad package-only or wildcard exclusion.
 
-## Pull requests
+## Worktrees
 
-Create a feature branch, keep commits focused, and use a Conventional Commit PR title.
-Update the tests and documentation with the change, fill in the release line of the PR
-template, and run `pnpm check` before requesting review.
+A linked worktree gives a second branch its own directory, so two changes can be in
+progress at once. Create it outside this checkout:
+
+```sh
+git worktree add ../<directory> -b <type>/<issue>-<slug> origin/main
+cd ../<directory>
+pnpm install --frozen-lockfile
+pnpm check
+```
+
+- The Git hooks are installed once, in the primary checkout, and run in every linked
+  worktree.
+- Dependencies are not shared: each worktree runs its own
+  `pnpm install --frozen-lockfile`, and its build and coverage output stay inside it.
+- Never copy `.env*` files or personal settings into a worktree.
+- `pnpm dev` in a second worktree finds Vite's default port taken and moves to the next
+  free one; read the URL it prints.
+- Remove a worktree with `git worktree remove <directory>` once its branch has merged
+  and `git status` there is clean.
+
+## Pull Request Process
+
+1. Create a branch from `main`. Changes reach `main` only through a pull request.
+2. Make the change with its tests, and update `README.md` and the affected docs when
+   something a user observes moved.
+3. Run `pnpm check` on the committed tree. `pnpm fix` applies formatting; commit its
+   result before judging the gate.
+4. Open the pull request with the template: a Summary, exactly one `Release:` line, a
+   Test Plan naming the commands you ran, and the Checklist.
+
+Commits and the pull request title follow Conventional Commits,
+`<type>(<optional-scope>): <summary>`. The accepted types are the `types:` input of
+[the PR title workflow](.github/workflows/check-pr-title.yml).
+
+With Claude Code, `CLAUDE.md` is the project guide and the procedures are the skills
+under `.claude/skills/`: `tdd`, `smart-commit`, `create-pr`, and `running-the-app` for a
+change made by hand, `shipping-issues` to take an issue through to a merged pull
+request.

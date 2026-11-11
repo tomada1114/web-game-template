@@ -89,10 +89,12 @@ so that judgment only has to correct the few it gets wrong. Write the correction
 - **Unblock edge is fake** — `#12` was mentioned as context, not as a prerequisite.
   Demote from P0; the ranking usually changes.
 - **Umbrella / epic** — an issue whose body is a checklist of other issues is not
-  implementable. Its tier is not wrong, so leave it: never select it, ship its
-  highest-priority child instead. Same for an issue that is really five issues — report
-  it as `NEEDS-CLARIFICATION`, do not demote it to hide it. Tiers answer "how much does
-  this matter", not "can I ship it"; readiness is the other axis, and it lives in the
+  implementable. It carries the `tracking` label and no tier (see `triaging-issues`);
+  the digest drops it before ranking, so ship its highest-priority child instead. One
+  that still has a tier or lacks the label is relabelled `tracking` and its tier
+  removed. An issue that is really five issues is not a tracking issue: report it as
+  `NEEDS-CLARIFICATION`, do not demote it to hide it. Tiers answer "how much does this
+  matter", not "can I ship it"; readiness is the other axis, and it lives in the
   dependency-triage reference.
 - **Cheap unblock beats expensive damage** — when the top two are close, prefer the one
   that is smaller and touches fewer files. It lands sooner and shortens the window in

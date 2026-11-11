@@ -43,6 +43,8 @@ from pathlib import Path
 from typing import Any
 
 SKILL_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SKILL_DIR))
+from issue_digest import format_tracking_line  # noqa: E402
 # How many worktrees a run will hold open at once unless the caller says
 # otherwise. Three is a balance struck in cost-discipline.md, not a technical
 # limit; --max-parallel is how a caller who asked for more gets it.
@@ -335,6 +337,9 @@ def main() -> int:
         for i in digest["issues"] if i.get("stale_dependency_labels")
     }
     ranking = digest["ranking"]
+    # A tracking issue has no ranking row at all (the digest drops it), so it
+    # can never be the pick, named or not; this list only explains why.
+    tracking = digest.get("tracking_issues", [])
     ready = [r for r in ranking if r["readiness"] == "READY"]
     if explicit_issue is not None:
         ready = [r for r in ranking if r["number"] == explicit_issue]
@@ -369,6 +374,9 @@ def main() -> int:
         n = lead[0]["number"]
         next_cmd = (f"git switch {pre.get('default_branch', 'main')} && "
                     f"git pull --ff-only && git switch -c {branches[n]}")
+    elif explicit_issue in tracking:
+        next_cmd = (f"nothing to ship — #{explicit_issue} is a tracking issue; "
+                    "name one of its sub-issues instead")
     else:
         next_cmd = "nothing to ship — see held:/needs-design: above"
 
@@ -386,6 +394,7 @@ def main() -> int:
         "label_coverage": digest["label_coverage"],
         "contract_coverage": digest["contract_coverage"],
         "needs_design": digest["needs_design"],
+        "tracking_issues": tracking,
         "stale_dependency_labels": sorted(stale_dependency_by_number),
         "cache": digest.get("cache"),
         "open_issue_count": digest["open_issue_count"],
@@ -506,6 +515,8 @@ def main() -> int:
         more = f" (+{len(held) - 6} more)" if len(held) > 6 else ""
         print("held: " + ", ".join(
             f"#{r['number']} {r['readiness']}" for r in held[:6]) + more)
+    if tracking:
+        print(format_tracking_line(tracking))
     print()
     print(f"next: {next_cmd}")
     print("verdict: READY")

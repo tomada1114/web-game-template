@@ -42,6 +42,12 @@ An issue that fails 1 or 5 is **not** implemented silently. Report it as
 `NEEDS-CLARIFICATION` with the specific missing information, and move on to the next
 candidate.
 
+A `tracking` issue never reaches this gate. It is a checklist of sub-issues, so the
+digest drops it before ranking and names it on the `tracking:` line: it is never
+selected, not even by its number, and never offered a tier. Ship its sub-issues. An
+`on hold` or `blocked: external` issue is different: it is real work that keeps its tier
+and waits as a `NOT-READY-LABEL`.
+
 ## Dependency edges the regex misses
 
 `issue_digest.py` catches explicit `#N` references and common EN/JA dependency
@@ -66,7 +72,8 @@ phrasings. These edges only appear on reading:
   shortlisted issues name the same symbol or the same failure, ship one first and rebase
   the other on the result — or report them as one issue.
 - **Umbrella issues** — an epic listing `- [ ] #12 #13 #14` is not itself implementable.
-  Treat it as a container: ship the children, leave the epic.
+  It carries the `tracking` label and no tier (see `triaging-issues`); the digest drops
+  it and its edges before ranking. Ship the children, leave the epic.
 
 When two issues could reasonably go either order, prefer the one that is smaller and
 touches fewer files first — it shortens the window in which the other's branch can

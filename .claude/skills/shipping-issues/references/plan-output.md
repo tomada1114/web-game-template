@@ -40,6 +40,9 @@ that carry a duty for the calling session.
 - `select:` / `batch A:` / `branch:` — the pick, everything that can be worked beside
   it, and the branch name already derived for each. Use those names.
 - `needs-design:` — the input to SKILL.md step 8b's background sweep.
+- `tracking:` — issues labelled `tracking`. They have no ranking row, so they are never
+  the pick, in any mode; naming one as the issue number prints `select: none`. Ship the
+  sub-issues it lists.
 - `next:` — the exact command step 3 starts with.
 
 `--record` writes `run-start`, `selection` and (in parallel mode) `parallel-group` to

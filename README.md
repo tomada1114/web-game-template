@@ -4,34 +4,6 @@
 
 A short description.
 
-## Install
-
-```sh
-pnpm add my-game
-```
-
-Requires Node.js 24 or newer. The package ships ESM only. CommonJS consumers need a
-Node.js version with unflagged `require(esm)` support (20.19+, 22.12+, or 24+).
-
-## Quick start
-
-```ts
-import { normalizeIdentifier } from "my-game";
-
-console.log(normalizeIdentifier("Hello World"));
-// => "hello-world"
-```
-
-All public symbols are named exports from the package root. Deep imports are private and
-blocked by the package export map.
-
-## API
-
-- `normalizeIdentifier(input, options?)` creates a URL- and filename-safe ASCII
-  identifier using `-`, `_`, `.`, or `~` as its separator.
-- `withTimeout(operation, options)` runs an abortable operation with a deadline.
-- `InvalidInputError` and `TimeoutError` expose stable error codes.
-
 <!-- template-only:start -->
 
 ## Use this template
@@ -50,15 +22,47 @@ for the complete command syntax. Bootstrap removes this section from the generat
 repository.
 <!-- template-only:end -->
 
+## Quickstart
+
+Requires Node.js 24 and pnpm 11 through Corepack (CONTRIBUTING.md's "Prerequisites" has
+the details).
+
+```sh
+corepack enable
+corepack pnpm@11.18.0 install --frozen-lockfile
+pnpm hooks:install
+pnpm dev
+```
+
+`pnpm dev` starts Vite's dev server for `apps/web` and runs until stopped; open the URL
+it prints (<http://localhost:5173> unless that port is taken). `pnpm build` writes the
+static site to `apps/web/dist`. Every asset URL in it is relative, so the directory can
+be served from any path.
+
+## Architecture
+
+```text
+packages/core/   # the game rules: deterministic, no dependencies, no DOM, no Node
+apps/web/        # the browser entry; Vite builds it into apps/web/dist
+scripts/         # repository automation, never shipped
+tests/           # repository-level tests
+```
+
+It is a pnpm workspace. `apps/web` depends on `packages/core` by its workspace name and
+imports it only through `packages/core/src/index.ts`. Anything that reads time,
+randomness, the device, or the network lives in `apps/web` and enters core as a plain
+value. `CLAUDE.md` holds the layer rules in full.
+
 ## Development
 
 ```sh
-corepack pnpm@11.18.0 install --frozen-lockfile
-pnpm hooks:install
-pnpm check
+pnpm check:quick   # format check, lint, typecheck, tests: the everyday gate
+pnpm check         # the full gate: the checks above with coverage, then the build
+pnpm fix           # ESLint autofix, then Prettier
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete workflow.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the prerequisites, the workflow, worktrees,
+and the pull request process.
 
 ## License
 
