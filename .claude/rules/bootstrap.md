@@ -10,9 +10,9 @@ paths:
 # The bootstrap flow (template only)
 
 `scripts/bootstrap.mjs` turns a fresh copy of this template into a named repository,
-once. It collects metadata (interactively, or from `<package-name>` plus flags), runs
-`transform()` as a dry run into an in-memory preview, and repeats it for real only after
-the preview passes `findPlaceholders` and `assertGeneratedAiLayer`.
+once. It collects metadata (interactively, or from `<slug>` plus `--title` and the other
+flags), runs `transform()` as a dry run into an in-memory preview, and repeats it for
+real only after the preview passes `findPlaceholders` and `assertGeneratedAiLayer`.
 
 ## The generated tree is what is under test
 
@@ -45,6 +45,14 @@ that constant's comment asks for.
 - Placeholders fail the checks until filled and never get a default. Name, author, and
   description come from the user or the kickoff, never invented.
 - Unknown options fail with `ERR_ARGUMENT_UNKNOWN`.
+- The slug is lowercase kebab case, never scoped; it names the root package and scopes
+  the workspace packages (`@<slug>/core`, `@<slug>/web`). Slug and title are capped so
+  the constants in `apps/web/src/game-info.ts` stay on one line at Prettier's width, and
+  the title refuses characters a TypeScript literal or HTML text would need rewritten.
+- Every file that carries the slug or title is a `PLACEHOLDER_TARGETS` entry, including
+  `pnpm-lock.yaml` (its `apps/web` importer names the core package) and any module that
+  imports a workspace package by its `@my-game/` name. A missed one fails
+  `ERR_WORKSPACE_NAME` or `ERR_GAME_RENAME_MISSING` in the verifier.
 
 ## Verifying a change
 

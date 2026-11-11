@@ -1,8 +1,12 @@
-# Single-package repository: no `packages:` globs on purpose.
-#
-# This file exists so the pnpm supply-chain policy below is declared in one
-# machine-readable place, reviewable in a diff, and applied to every install
-# (local, CI, and release) without relying on per-developer configuration.
+# `packages/*` holds the deterministic rules (`packages/core`), `apps/*` the
+# renderers that consume them (`apps/web`); see "Architecture" in CLAUDE.md.
+packages:
+  - "packages/*"
+  - "apps/*"
+
+# The pnpm supply-chain policy below is declared in this one machine-readable
+# place, reviewable in a diff, and applied to every install (local, CI, and
+# release) without relying on per-developer configuration.
 
 # Reproduce the pnpm version resolved in pnpm-lock.yaml when the local pnpm
 # does not satisfy devEngines.packageManager, instead of failing the install.

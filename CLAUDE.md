@@ -3,12 +3,13 @@
 A template for a TypeScript browser game, worked on with Claude Code. Nothing here is
 published to npm: to publish means pushing a release tag or uploading a build to a game
 portal. Development and CI run on Node >= 24 with pnpm 11 through Corepack; never relax
-`devEngines.runtime`'s `onFail: error`.
+`devEngines.runtime`'s `onFail: error`. It is a pnpm workspace: `packages/core` holds
+the game rules, and `apps/web` builds them into a static site with Vite 8.
 
-The repository still has the single-package shape it was cut from. The game side (rules
-package, scenes, portal adapter, release flow) is not built yet; its design decisions
-are the drafts under `docs/design/skill-drafts/`, with requirements in
-`docs/product/requirements.md`. Read the matching draft before implementing that part.
+The game side beyond that skeleton (seeded rules, scenes, portal adapter, release flow)
+is not built yet; its design decisions are the drafts under `docs/design/skill-drafts/`,
+with requirements in `docs/product/requirements.md`. Read the matching draft before
+implementing that part.
 
 This file holds what has to be true before the task is known. Conventions for a kind of
 file live in `.claude/rules/` and load when such a file is read; procedures live in
@@ -22,6 +23,9 @@ pnpm check:quick   # format check, lint, typecheck, tests — the everyday gate
 pnpm check         # the full gate: the checks above with coverage, then the build
 pnpm fix           # ESLint autofix, then Prettier
 pnpm test:coverage # tests with the coverage thresholds enforced
+pnpm typecheck     # tsc -b over every workspace program
+pnpm build         # build apps/web into apps/web/dist
+pnpm dev           # Vite's dev server for apps/web; runs until stopped
 pnpm repo:labels   # create/update GitHub labels from .github/labels.yml
 ```
 
@@ -37,22 +41,34 @@ This checkout is the template itself. The bootstrap flow removes itself, this bl
 
 <!-- template-only:end -->
 
-Run the narrowest check that can fail, then the gate: one test file with
-`pnpm exec vitest run tests/<name>.test.ts`; `pnpm check` for anything reachable from
-`src/index.ts`; `pnpm install` then `pnpm check` after `package.json` or
-`pnpm-workspace.yaml`; `pnpm fix` after Markdown. CI and the pre-commit hook call these
-same scripts and define no check of their own.
+Run the narrowest check that can fail, then the gate: one Vitest project with
+`pnpm exec vitest run --project core` (or `web`, `unit`, `automation`) or one file with
+`pnpm exec vitest run <path>`; `pnpm typecheck` then `pnpm build` for the web entry or
+`apps/web/index.html`; `pnpm install` then `pnpm check` after a `package.json` or
+`pnpm-workspace.yaml`; `pnpm fix` after Markdown. There are no per-package test scripts.
+CI and the pre-commit hook call these same scripts and define no check of their own.
 
 ## Architecture
 
 ```
-src/
-├── index.ts      # the public contract: the only module consumers can import
-├── cli.ts        # optional command entry; not an import surface
-├── internal/     # private; never re-exported from index.ts
-└── *.ts          # implementation modules, re-exported by name from index.ts
-scripts/*.mjs     # repository automation; never ships
+packages/core/
+├── src/index.ts   # the only module apps/web imports
+└── test/          # core's unit tests
+apps/web/
+├── index.html     # the page Vite builds into apps/web/dist
+├── src/main.ts    # the browser entry
+├── vite.config.ts # base "./": every built asset URL is relative
+└── test/          # unit tests of pure helpers
+scripts/           # repository automation (.mjs), never shipped
+tests/             # repository-level tests
 ```
+
+- `packages/core` holds the deterministic rules and imports nothing: no dependencies, no
+  DOM, no Node. It never imports from `apps/*`.
+- `apps/web` depends on core by its workspace name and reaches it only through
+  `packages/core/src/index.ts`.
+- Anything that reads time, randomness, the device, or the network lives in `apps/web`
+  and enters core as a plain value.
 
 ## Security and human approval
 

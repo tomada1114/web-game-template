@@ -1,18 +1,19 @@
 {
-  "name": "my-package",
+  "name": "my-game",
   "version": "0.1.1",
+  "private": true,
   "description": "A short description.",
   "keywords": [],
   "license": "MIT",
   "author": "Your Name <you@example.com>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-name/my-package.git"
+    "url": "git+https://github.com/your-name/my-game.git"
   },
   "bugs": {
-    "url": "https://github.com/your-name/my-package/issues"
+    "url": "https://github.com/your-name/my-game/issues"
   },
-  "homepage": "https://github.com/your-name/my-package#readme",
+  "homepage": "https://github.com/your-name/my-game#readme",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -30,26 +31,15 @@
       "onFail": "download"
     }
   },
-  "files": [
-    "dist"
-  ],
   "sideEffects": false,
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "default": "./dist/index.js"
-    },
-    "./package.json": "./package.json"
-  },
-  "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "node scripts/clean.mjs dist && tsc -p tsconfig.build.json",
-    "clean": "node scripts/clean.mjs dist coverage .package .eslintcache",
+    "dev": "pnpm -C apps/web exec vite",
+    "build": "pnpm -C apps/web exec vite build",
+    "clean": "node scripts/clean.mjs apps/web/dist coverage .package .tsbuild .eslintcache",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.build.json --noEmit",
+    "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

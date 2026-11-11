@@ -1,0 +1,14 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "outDir": "../../../.tsbuild/core-test",
+    "tsBuildInfoFile": "../../../.tsbuild/core-test.tsbuildinfo",
+    "rootDir": ".",
+    "lib": ["ES2023"]
+  },
+  "include": ["."],
+  "references": [{ "path": ".." }]
+}

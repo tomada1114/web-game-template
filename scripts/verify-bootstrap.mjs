@@ -15,7 +15,7 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { MARKER_TARGETS, findPlaceholders } from "./bootstrap.mjs";
+import { MARKER_TARGETS, escapeHtml, findPlaceholders } from "./bootstrap.mjs";
 import { isolatedGitEnv } from "./lib/git-env.mjs";
 import { isMain } from "./lib/is-main.mjs";
 import { parseJson, readKey } from "./lib/json.mjs";
@@ -54,14 +54,15 @@ export function run(command, args, cwd) {
  * Check the lightweight, observable output of one bootstrap run.
  *
  * @param {string} destination
- * @param {string} packageName
+ * @param {string} packageName - The slug bootstrap was given.
+ * @param {string} title - The display title bootstrap was given.
  *
  * @remarks
  * Exported so `tests/verify-bootstrap.test.ts` can exercise each of its
  * failure branches directly against a hand-built fixture tree, rather than
  * only through a full, real `main()` bootstrap run.
  */
-export function assertGenerated(destination, packageName) {
+export function assertGenerated(destination, packageName, title) {
   const placeholders = findPlaceholders(destination);
   if (placeholders.length > 0) {
     throw new Error(
@@ -145,6 +146,57 @@ export function assertGenerated(destination, packageName) {
         "Expected: sideEffects: false.\n" +
         "Next: update the template manifest, then rerun bootstrap:e2e.",
     );
+  }
+
+  assertRenamedWorkspace(destination, packageName, title);
+}
+
+/**
+ * Check that the slug and title reached every workspace file that carries
+ * them. A missed rename is not a leftover placeholder in every case — a file
+ * dropped from bootstrap's target list keeps the template's value and still
+ * parses — so each value is checked where it has to land.
+ *
+ * @param {string} destination
+ * @param {string} packageName
+ * @param {string} title
+ */
+function assertRenamedWorkspace(destination, packageName, title) {
+  /** @type {[string, string][]} */
+  const expectedNames = [
+    ["packages/core/package.json", `@${packageName}/core`],
+    ["apps/web/package.json", `@${packageName}/web`],
+  ];
+  for (const [relative, expected] of expectedNames) {
+    const workspaceManifest = parseJson(
+      readFileSync(path.join(destination, relative), "utf8"),
+    );
+    if (readKey(workspaceManifest, "name") !== expected) {
+      throw new Error(
+        `ERR_WORKSPACE_NAME: generated ${relative} is not named ${expected}.\n` +
+          `Actual: ${JSON.stringify(readKey(workspaceManifest, "name"))}\n` +
+          "Next: list the file in bootstrap.mjs's PLACEHOLDER_TARGETS, then rerun bootstrap:e2e.",
+      );
+    }
+  }
+
+  /** @type {[string, string][]} */
+  const expectedText = [
+    ["apps/web/src/game-info.ts", `export const GAME_SLUG = "${packageName}";`],
+    ["apps/web/src/game-info.ts", `export const GAME_TITLE = "${title}";`],
+    ["apps/web/index.html", `<title>${escapeHtml(title)}</title>`],
+    // The workspace dependency is the one place the lockfile names a
+    // workspace package; a stale key fails `pnpm install --frozen-lockfile`.
+    ["pnpm-lock.yaml", `'@${packageName}/core':`],
+  ];
+  for (const [relative, expected] of expectedText) {
+    if (!readFileSync(path.join(destination, relative), "utf8").includes(expected)) {
+      throw new Error(
+        `ERR_GAME_RENAME_MISSING: generated ${relative} does not carry the new name.\n` +
+          `Expected: ${expected}\n` +
+          "Next: list the file in bootstrap.mjs's PLACEHOLDER_TARGETS, then rerun bootstrap:e2e.",
+      );
+    }
   }
 }
 
@@ -231,6 +283,7 @@ export function main(argv = [], runner = run) {
   let passed = false;
   try {
     const packageName = "acme-game";
+    const title = "Acme Game";
     const destination = path.join(workspace, packageName);
     mkdirSync(destination);
     copyTemplate(destination);
@@ -239,6 +292,8 @@ export function main(argv = [], runner = run) {
       [
         "scripts/bootstrap.mjs",
         packageName,
+        "--title",
+        title,
         "--author",
         "Ada Lovelace",
         "--github-user",
@@ -248,7 +303,7 @@ export function main(argv = [], runner = run) {
       ],
       destination,
     );
-    assertGenerated(destination, packageName);
+    assertGenerated(destination, packageName, title);
     if (argv[0] === "--check") {
       runner("pnpm", ["install", "--frozen-lockfile"], destination);
       runner("pnpm", ["run", "check"], destination);

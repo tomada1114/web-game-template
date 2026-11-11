@@ -1,8 +1,10 @@
 # Dependencies
 node_modules/
 
-# Build output
+# Build output: every `dist/` (apps/web/dist among them), and the
+# declarations `tsc -b` emits so one workspace program can reference another.
 dist/
+.tsbuild/
 *.tgz
 
 # Test and coverage output
