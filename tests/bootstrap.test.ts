@@ -806,6 +806,28 @@ describe("bootstrap generation", () => {
     );
   });
 
+  it.each(["file", "directory", "absent"] as const)(
+    "does not report a token under .git/ as dangling when .git is %s at the root (#20)",
+    (shape) => {
+      // In a linked worktree `.git` is a file, so its first segment exists
+      // while `.git/config` does not. Version-control internals are never a
+      // generated-tree path, whatever shape `.git` takes on disk.
+      const root = copyTemplate();
+      if (shape === "file") {
+        writeFileSync(path.join(root, ".git"), "gitdir: /elsewhere/.git/worktrees/x\n");
+      } else if (shape === "directory") {
+        mkdirSync(path.join(root, ".git"));
+      }
+      const claudeMd = path.join(root, "CLAUDE.md");
+      writeFileSync(
+        claudeMd,
+        `${readFileSync(claudeMd, "utf8")}\nEdit \`.git/config\` or \`.git/hooks/pre-commit.sample\`.\n`,
+      );
+
+      expect(() => bootstrap(root, options(`git-internals-${shape}`))).not.toThrow();
+    },
+  );
+
   it("does not scan a gitignored worktree checkout for dangling Markdown references", () => {
     // .claude/worktrees/ holds full checkouts (see .gitignore); a bootstrap
     // run against a real, non-fresh checkout must not fail because of
