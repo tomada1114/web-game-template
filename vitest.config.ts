@@ -4,6 +4,10 @@ import { defineConfig } from "vitest/config";
 // repository's own tests.
 const fixtures = "tests/fixtures/**";
 
+// The Playwright boot smoke runs in a real browser through `pnpm test:e2e`;
+// Vitest has no page to give it.
+const e2e = "tests/e2e/**";
+
 // Tests that import repository automation, touch the filesystem, spawn a
 // subprocess, or use git. They are listed explicitly so a new test defaults to
 // the short-timeout unit project until its I/O needs are deliberately reviewed.
@@ -77,7 +81,7 @@ export default defineConfig({
         test: {
           name: "unit",
           include: ["tests/**/*.test.ts"],
-          exclude: [...automationTests, fixtures],
+          exclude: [...automationTests, fixtures, e2e],
           testTimeout: 5_000,
           hookTimeout: 5_000,
         },

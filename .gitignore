@@ -9,6 +9,8 @@ dist/
 
 # Test and coverage output
 coverage/
+test-results/
+playwright-report/
 
 # Packaging scratch directory. `pnpm clean` removes it.
 .package/
