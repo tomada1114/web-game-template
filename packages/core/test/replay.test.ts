@@ -11,14 +11,7 @@ import {
   type ReplayRecord,
 } from "../src/index.js";
 
-function thrownBy(run: () => unknown): unknown {
-  try {
-    run();
-  } catch (error) {
-    return error;
-  }
-  return undefined;
-}
+import { thrownBy } from "./thrown-by.js";
 
 function recordOf(cells: readonly number[], seed = 1): ReplayRecord {
   return { v: 1, seed, config: SAMPLE_CONFIG, moves: cells.map((cell) => ({ cell })) };
@@ -51,12 +44,23 @@ describe("replay", () => {
     const record: ReplayRecord = {
       v: 1,
       seed: 77,
-      config: { ...SAMPLE_CONFIG, moveLimit: 3 },
+      config: { ...SAMPLE_CONFIG, moveLimit: 25, scrambleMin: 4, scrambleMax: 8 },
       moves: [],
     };
 
     expect(replay(record).state).toStrictEqual(createGame(77, record.config));
-    expect(replay(record).state.limit).toBe(3);
+    expect(replay(record).state.limit).toBe(25);
+  });
+
+  it("throws a RangeError for a config createGame rejects", () => {
+    const record: ReplayRecord = {
+      v: 1,
+      seed: 1,
+      config: { ...SAMPLE_CONFIG, moveLimit: 0 },
+      moves: [],
+    };
+
+    expect(thrownBy(() => replay(record))).toBeInstanceOf(RangeError);
   });
 
   it("leaves the record unchanged", () => {

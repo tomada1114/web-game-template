@@ -28,6 +28,26 @@ function scramble(prng: Prng, config: Config): number[] {
   return cells;
 }
 
+function assertValidConfig(config: Config): void {
+  // A record's config arrives as JSON, so the literal types prove nothing here.
+  if ((config.size as number) !== 5 || (config.kinds as number) !== 4) {
+    throw new RangeError("config.size must be 5 and config.kinds must be 4.");
+  }
+  const { moveLimit, scrambleMin, scrambleMax } = config;
+  if (
+    !Number.isInteger(moveLimit) ||
+    !Number.isInteger(scrambleMin) ||
+    !Number.isInteger(scrambleMax) ||
+    scrambleMin < 1 ||
+    scrambleMin > scrambleMax ||
+    scrambleMax > moveLimit
+  ) {
+    throw new RangeError(
+      "config needs integers with 1 <= scrambleMin <= scrambleMax <= moveLimit.",
+    );
+  }
+}
+
 /**
  * Starts a game on the board the seed generates.
  *
@@ -38,11 +58,13 @@ function scramble(prng: Prng, config: Config): number[] {
  *
  * @param seed - Read as an unsigned 32-bit integer (`seed >>> 0`), which is the
  *   value the returned state carries.
- * @param config - Not validated. It needs integers with
- *   `0 <= scrambleMin <= scrambleMax <= moveLimit` and `moveLimit >= 1`; other
- *   values break the guarantees above, throw a `RangeError`, or never return.
+ * @param config - Needs `size` 5, `kinds` 4, and integers with
+ *   `1 <= scrambleMin <= scrambleMax <= moveLimit`.
+ * @throws RangeError when `config` breaks those constraints, before any board
+ *   is drawn.
  */
 export function createGame(seed: number, config: Config): State {
+  assertValidConfig(config);
   const unsignedSeed = seed >>> 0;
   const prng = createPrng(unsignedSeed);
   let cells = scramble(prng, config);

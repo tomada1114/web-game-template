@@ -93,15 +93,16 @@ export function turn(cells: readonly number[], cell: number, step: number): numb
  *
  * @returns A new state; `state` is left unchanged.
  * @throws InvalidMoveError (`ERR_INVALID_MOVE`) when `move.cell` is not the
- *   index of a cell on the board, or when the game is over.
+ *   index of a cell on the board, or when the game is over; a move on a game
+ *   that is over reports `game-over` whatever its cell.
  */
 export function applyMove(state: State, move: Move): State {
+  if (isOver(state)) {
+    throw new InvalidMoveError("game-over");
+  }
   const { cell } = move;
   if (!Number.isInteger(cell) || cell < 0 || cell >= state.cells.length) {
     throw new InvalidMoveError("cell-out-of-range");
-  }
-  if (isOver(state)) {
-    throw new InvalidMoveError("game-over");
   }
   return {
     seed: state.seed,
@@ -123,7 +124,9 @@ export function isOver(state: State): boolean {
  * Scores a state: `limit + 1 - movesUsed` when the board is solved, so a faster
  * solution scores higher, and `0` otherwise.
  *
- * @returns An integer from `0` to `limit`.
+ * @returns A non-negative integer: from `0` to `limit` for a state reached
+ *   from `createGame`, which never starts solved. A solved state with
+ *   `movesUsed` 0 scores `limit + 1`.
  */
 export function score(state: State): number {
   return isUniform(state.cells) ? state.limit + 1 - state.movesUsed : 0;

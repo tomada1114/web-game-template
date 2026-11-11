@@ -37,6 +37,7 @@ export interface ReplayResult {
  *   `RULES_VERSION`.
  * @throws InvalidMoveError (`ERR_INVALID_MOVE`) when a recorded move is one
  *   `applyMove` rejects.
+ * @throws RangeError when `record.config` is one `createGame` rejects.
  */
 export function replay(record: ReplayRecord): ReplayResult {
   if (record.v !== RULES_VERSION) {

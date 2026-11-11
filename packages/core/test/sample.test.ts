@@ -12,17 +12,10 @@ import {
   type State,
 } from "../src/index.js";
 
+import { thrownBy } from "./thrown-by.js";
+
 function stateOf(cells: readonly number[], movesUsed = 0): State {
   return { seed: 0, cells, movesUsed, limit: 20 };
-}
-
-function thrownBy(run: () => unknown): unknown {
-  try {
-    run();
-  } catch (error) {
-    return error;
-  }
-  return undefined;
 }
 
 function changedCells(before: State, after: State): number[] {
@@ -180,6 +173,13 @@ describe("applyMove", () => {
     expect(error).toMatchObject({ code: "ERR_INVALID_MOVE", reason: "game-over" });
   });
 
+  it("reports game-over before an out-of-range cell on a finished game", () => {
+    const error = thrownBy(() => applyMove(stateOf(MIXED, 20), { cell: 25 }));
+
+    expect(error).toBeInstanceOf(InvalidMoveError);
+    expect(error).toMatchObject({ code: "ERR_INVALID_MOVE", reason: "game-over" });
+  });
+
   it("accepts the last move the limit allows", () => {
     const after = applyMove(stateOf(MIXED, 19), { cell: 12 });
 
@@ -331,26 +331,20 @@ describe("createGame", () => {
   });
 
   it("draws one more reverse move when the scramble cancels out", () => {
-    const empty: Config = { ...SAMPLE_CONFIG, scrambleMin: 0, scrambleMax: 0 };
+    const four: Config = { ...SAMPLE_CONFIG, scrambleMin: 4, scrambleMax: 4 };
 
-    // Seed 0 draws no reverse move, so the board is still uniform; the extra
-    // draw is cell 4.
+    // Seed 12958 draws cell 1 four times, which cancels out; the extra draw is
+    // cell 10.
+    const state = createGame(12958, four);
     // prettier-ignore
-    expect(createGame(0, empty).cells).toEqual([
-      0, 0, 0, 3, 3,
-      0, 0, 0, 0, 3,
+    expect(state.cells).toEqual([
       0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0,
+      3, 0, 0, 0, 0,
+      3, 3, 0, 0, 0,
+      3, 0, 0, 0, 0,
       0, 0, 0, 0, 0,
     ]);
-    for (const seed of seeds) {
-      const state = createGame(seed, empty);
-      const prng = createPrng(seed);
-      prng.nextInt(1);
-
-      expect(isOver(state)).toBe(false);
-      expect(score(applyMove(state, { cell: prng.nextInt(25) }))).toBe(20);
-    }
+    expect(score(applyMove(state, { cell: 10 }))).toBe(20);
   });
 
   it("redraws the whole scramble when the limit leaves no room for one more move", () => {
@@ -391,5 +385,35 @@ describe("createGame", () => {
       state,
     );
     expect(score(solved)).toBe(1);
+  });
+
+  it.each<[string, Partial<Config>]>([
+    ["moveLimit 0", { moveLimit: 0, scrambleMin: 0, scrambleMax: 0 }],
+    ["scrambleMax 0", { scrambleMin: 0, scrambleMax: 0 }],
+    ["scrambleMin 0", { scrambleMin: 0 }],
+    ["a negative scrambleMin", { scrambleMin: -1 }],
+    ["scrambleMin above scrambleMax", { scrambleMin: 8, scrambleMax: 7 }],
+    ["scrambleMax above moveLimit", { moveLimit: 9, scrambleMax: 10 }],
+    ["a fractional moveLimit", { moveLimit: 20.5 }],
+    ["a fractional scrambleMin", { scrambleMin: 6.5 }],
+    ["a fractional scrambleMax", { scrambleMax: 9.5 }],
+    ["a NaN moveLimit", { moveLimit: Number.NaN }],
+    ["size 6", { size: 6 as 5 }],
+    ["kinds 2", { kinds: 2 as 4 }],
+  ])("throws a RangeError for %s", (_, override) => {
+    const config = { ...SAMPLE_CONFIG, ...override };
+
+    expect(thrownBy(() => createGame(1, config))).toBeInstanceOf(RangeError);
+  });
+
+  it("accepts the tightest config", () => {
+    const tightest: Config = {
+      ...SAMPLE_CONFIG,
+      moveLimit: 1,
+      scrambleMin: 1,
+      scrambleMax: 1,
+    };
+
+    expect(createGame(1, tightest).limit).toBe(1);
   });
 });
