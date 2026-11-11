@@ -139,11 +139,9 @@ export default defineConfig({
           branches: 80,
         },
         // Raised again by issue #98, which added dedicated coverage for
-        // verify-bootstrap.mjs's main()/run()/assertGenerated(),
-        // verify-package.mjs's main()/runCheck(), the since-removed
-        // sync-agents.mjs's main()/listFiles()/assertSourceDirectory(), and smoke-package.mjs's
-        // main()/installConsumer()/publicSubpaths() — the functions issue #88
-        // deliberately left out of its own, smaller raise. Measured baseline
+        // verify-bootstrap.mjs's main()/run()/assertGenerated() and for
+        // scripts since removed from this repository — the functions issue
+        // #88 deliberately left out of its own, smaller raise. Measured baseline
         // at the time of this raise: 88.52% statements, 80.05% branches,
         // 93.79% functions, 88.48% lines, rounded down to the nearest
         // multiple of 5, the same convention used for both earlier raises
