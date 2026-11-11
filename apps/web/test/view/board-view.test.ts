@@ -94,13 +94,19 @@ describe("toView", () => {
   });
 });
 
+function outcomeOf(state: core.State): [points: number, limit: number] {
+  return [core.score(state), state.limit];
+}
+
 describe("resultLines", () => {
   it("reports a board solved on move 7 as Score 14/20", () => {
     expect(
       resultLines(
-        stateOf(
-          Array.from({ length: 25 }, () => 3),
-          7,
+        ...outcomeOf(
+          stateOf(
+            Array.from({ length: 25 }, () => 3),
+            7,
+          ),
         ),
       ),
     ).toEqual({
@@ -111,7 +117,7 @@ describe("resultLines", () => {
 
   it("reports the 20th move without a solve as out of moves with score 0", () => {
     const cells = Array.from({ length: 25 }, (_, i) => (i === 0 ? 1 : 0));
-    expect(resultLines(stateOf(cells, 20))).toEqual({
+    expect(resultLines(...outcomeOf(stateOf(cells, 20)))).toEqual({
       headline: "Out of moves",
       score: "Score 0/20",
     });

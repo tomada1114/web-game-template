@@ -88,15 +88,17 @@ export function toView(state: core.State): BoardView {
   };
 }
 
-/** Result's headline and score line for a finished state. */
-export function resultLines(state: core.State): {
+/** Result's headline and score line for a finished board's `points` out of `limit`. */
+export function resultLines(
+  points: number,
+  limit: number,
+): {
   readonly headline: string;
   readonly score: string;
 } {
-  const points = core.score(state);
   return {
     headline: points > 0 ? "Solved!" : "Out of moves",
-    score: `Score ${String(points)}/${String(state.limit)}`,
+    score: `Score ${String(points)}/${String(limit)}`,
   };
 }
 

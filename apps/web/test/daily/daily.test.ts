@@ -5,7 +5,6 @@ import {
   bestKey,
   copyText,
   createSessionDay,
-  dailyBoardSeed,
   readBest,
   recordBest,
   resultButtons,
@@ -42,13 +41,6 @@ function fakeStore(entries: Record<string, string> = {}): FakeStore {
   return store;
 }
 
-function throwingStore(): KeyValueStore {
-  const fail = (): never => {
-    throw new DOMException("blocked", "SecurityError");
-  };
-  return { getItem: fail, setItem: fail, removeItem: fail };
-}
-
 describe("utcDay", () => {
   it("returns the UTC date, not the local one", () => {
     expect(utcDay(new Date("2026-11-05T23:59:59-07:00"))).toBe("2026-11-06");
@@ -74,18 +66,6 @@ describe("createSessionDay", () => {
   });
 });
 
-describe("dailyBoardSeed", () => {
-  it("gives every player the same seed for a day and slug", () => {
-    expect(dailyBoardSeed(DAY, SLUG)).toBe(dailyBoardSeed(DAY, SLUG));
-    expect(dailyBoardSeed(DAY, SLUG)).toBe(1278630309);
-  });
-
-  it("changes with the day and with the slug", () => {
-    expect(dailyBoardSeed("2026-11-06", SLUG)).not.toBe(dailyBoardSeed(DAY, SLUG));
-    expect(dailyBoardSeed(DAY, "other-game")).not.toBe(dailyBoardSeed(DAY, SLUG));
-  });
-});
-
 describe("bestKey", () => {
   it("joins the slug and the day", () => {
     expect(bestKey(SLUG, DAY)).toBe(KEY);
@@ -108,6 +88,15 @@ describe("shareText", () => {
     ).toBe("▱▱▱▱▱▱▱▱▱▱");
   });
 
+  it("scales the bar to another maxScore", () => {
+    expect(
+      shareText(TITLE, DAY, { score: 15, movesUsed: 15, maxScore: 30 }).split("\n"),
+    ).toEqual(["Test Game 2026-11-05", "15/30 · 15 moves", "▰▰▰▰▰▱▱▱▱▱"]);
+    expect(
+      shareText(TITLE, DAY, { score: 7, movesUsed: 3, maxScore: 10 }).split("\n")[2],
+    ).toBe("▰▰▰▰▰▰▰▱▱▱");
+  });
+
   it("says out of moves for an unsolved board", () => {
     expect(shareText(TITLE, DAY, { score: 0, movesUsed: 20, maxScore: 20 })).toBe(
       "Test Game 2026-11-05\n0/20 · out of moves\n▱▱▱▱▱▱▱▱▱▱",
@@ -125,10 +114,6 @@ describe("readBest", () => {
     for (const raw of ["0", "-3", "1.5", "abc", "", "07"]) {
       expect(readBest(fakeStore({ [KEY]: raw }), KEY)).toBeNull();
     }
-  });
-
-  it("returns null when the store throws", () => {
-    expect(readBest(throwingStore(), KEY)).toBeNull();
   });
 });
 
@@ -158,10 +143,6 @@ describe("recordBest", () => {
     expect(recordBest(store, KEY, 0)).toBe(false);
     expect(store.writes).toBe(0);
   });
-
-  it("reports no new best when the store throws", () => {
-    expect(recordBest(throwingStore(), KEY, 14)).toBe(false);
-  });
 });
 
 describe("titleLines", () => {
@@ -172,9 +153,8 @@ describe("titleLines", () => {
     });
   });
 
-  it("hides the best line when none is stored or the store throws", () => {
-    expect(titleLines(fakeStore(), SLUG, DAY).best).toBeNull();
-    expect(titleLines(throwingStore(), SLUG, DAY)).toEqual({
+  it("hides the best line when none is stored", () => {
+    expect(titleLines(fakeStore(), SLUG, DAY)).toEqual({
       daily: "Daily · 2026-11-05",
       best: null,
     });

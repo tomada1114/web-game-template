@@ -1,5 +1,3 @@
-import * as core from "@my-game/core";
-
 import { type KeyValueStore } from "../platform/platform.js";
 
 const BAR_LENGTH = 10;
@@ -22,11 +20,6 @@ export function createSessionDay(clock: () => Date): () => string {
   };
 }
 
-/** The seed of the daily board for `day`; `slug` is the game's `GAME_SLUG`. */
-export function dailyBoardSeed(day: string, slug: string): number {
-  return core.dailySeed(day, slug);
-}
-
 /** The storage key of the best score for `day`: `<slug>:best:<day>`. */
 export function bestKey(slug: string, day: string): string {
   return `${slug}:best:${day}`;
@@ -44,7 +37,8 @@ export interface DailyOutcome {
 
 /**
  * Returns the three-line share text, joined by `\n` with no trailing newline:
- * the title and day, the score and moves, and a 10-glyph bar.
+ * the title and day, the score and moves, and a 10-glyph bar filled in
+ * proportion to `score / maxScore`.
  */
 export function shareText(title: string, day: string, outcome: DailyOutcome): string {
   const max = String(outcome.maxScore);
@@ -52,29 +46,28 @@ export function shareText(title: string, day: string, outcome: DailyOutcome): st
     outcome.score > 0
       ? `${String(outcome.score)}/${max} · ${String(outcome.movesUsed)} moves`
       : `0/${max} · out of moves`;
-  const filled = Math.min(BAR_LENGTH, Math.max(0, Math.floor(outcome.score / 2)));
+  const scaled =
+    outcome.maxScore > 0
+      ? Math.floor((outcome.score * BAR_LENGTH) / outcome.maxScore)
+      : 0;
+  const filled = Math.min(BAR_LENGTH, Math.max(0, scaled));
   const bar = "▰".repeat(filled) + "▱".repeat(BAR_LENGTH - filled);
   return `${title} ${day}\n${detail}\n${bar}`;
 }
 
 /**
- * Reads the stored best under `key`; `null` when none is stored, the value is
- * not a positive integer, or the store fails.
+ * Reads the stored best under `key`; `null` when none is stored or the value is
+ * not a positive integer.
  */
 export function readBest(storage: KeyValueStore, key: string): number | null {
-  let raw: string | null;
-  try {
-    raw = storage.getItem(key);
-  } catch {
-    return null;
-  }
+  const raw = storage.getItem(key);
   if (raw === null || !/^[1-9]\d*$/.test(raw)) return null;
   return Number(raw);
 }
 
 /**
  * Stores `score` under `key` when it is a new best: `score > 0` and either no
- * best is stored or `score` beats it. Storage errors are swallowed.
+ * best is stored or `score` beats it.
  *
  * @returns Whether the stored best increased.
  */
@@ -86,11 +79,7 @@ export function recordBest(
   if (score <= 0) return false;
   const best = readBest(storage, key);
   if (best !== null && score <= best) return false;
-  try {
-    storage.setItem(key, String(score));
-  } catch {
-    return false;
-  }
+  storage.setItem(key, String(score));
   return true;
 }
 

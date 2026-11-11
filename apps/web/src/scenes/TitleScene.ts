@@ -1,6 +1,6 @@
 import * as Phaser from "phaser";
 
-import { dailyBoardSeed, titleLines } from "../daily/daily.js";
+import { titleLines } from "../daily/daily.js";
 import { GAME_SLUG, GAME_TITLE } from "../game-info.js";
 import { type Platform } from "../platform/platform.js";
 import { colors, layout, radius, space, type } from "../theme/tokens.js";
@@ -63,7 +63,7 @@ export class TitleScene extends Phaser.Scene {
     );
     const buttons: Button[] = [
       addButton(this, cx, top, layout.buttonWidth, "Play daily", true, () => {
-        this.leave({ seed: dailyBoardSeed(day, GAME_SLUG), day });
+        this.leave({ day });
       }),
       addButton(this, cx, top + pitch, layout.buttonWidth, "Practice", false, () => {
         this.leave({ seed: practiceSeed() });
