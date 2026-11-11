@@ -36,11 +36,15 @@ const LEGACY_RELEASE_DIRECTORY = ".change" + "set";
 const TEMPLATE_NAMES = ["my-game", "My Game"];
 const RESIDUE_EXEMPT_FILES = new Set(["CHANGELOG.md"]);
 const RESIDUE_EXEMPT_PREFIXES = ["docs/product/", "docs/design/"];
+// Skipped only at the generated repository's root: a nested `dist` is source.
 const RESIDUE_SKIP_DIRECTORIES = new Set([".git", "node_modules", ".package", "dist"]);
 
 // The template's `## Product` placeholder, which the bootstrap must leave as
 // it is: a generated repository's first task is to replace it.
 const PRODUCT_HEADING = "## Product";
+// What tests/product-section.test.ts prints when it fails on that rule.
+const PRODUCT_FAILURE =
+  /CLAUDE\.md:\d+: TODO:|write ## Product from the game's requirements/;
 export const PRODUCT_PLACEHOLDER = [
   "TODO: What this game is, in one paragraph.",
   "TODO: Who it is for, and the core interaction.",
@@ -56,25 +60,34 @@ const PRODUCT_FIXTURE = [
  * @param {string} command
  * @param {string[]} args
  * @param {string} cwd
+ * @param {{ capture?: boolean }} [options] - With `capture`, the output is
+ *   echoed and also attached to a failure's error as `output`.
  *
  * @remarks
  * Exported so `tests/verify-bootstrap.test.ts` can exercise both outcomes
  * directly with a cheap real subprocess (a bare `node -e`), instead of only
  * through `main()`'s full bootstrap run.
  */
-export function run(command, args, cwd) {
+export function run(command, args, cwd, { capture = false } = {}) {
   const result = spawnSync(command, args, {
     cwd,
     encoding: "utf8",
-    stdio: "inherit",
+    stdio: capture ? "pipe" : "inherit",
     timeout: 900_000,
     // Every command here runs against a throwaway workspace, so none of them
     // may inherit a hook's GIT_DIR — see scripts/lib/git-env.mjs.
     env: isolatedGitEnv(),
   });
+  const output = capture ? result.stdout + result.stderr : "";
+  if (capture) {
+    process.stdout.write(output);
+  }
   if (result.status !== 0) {
-    throw new Error(
-      `ERR_BOOTSTRAP_E2E: ${command} ${args.join(" ")} failed with exit ${String(result.status)}.`,
+    throw Object.assign(
+      new Error(
+        `ERR_BOOTSTRAP_E2E: ${command} ${args.join(" ")} failed with exit ${String(result.status)}.`,
+      ),
+      { output },
     );
   }
 }
@@ -208,7 +221,7 @@ function listGeneratedFiles(root, relative = "") {
   for (const entry of readdirSync(path.join(root, relative), { withFileTypes: true })) {
     const child = relative === "" ? entry.name : `${relative}/${entry.name}`;
     if (entry.isDirectory()) {
-      if (!RESIDUE_SKIP_DIRECTORIES.has(entry.name)) {
+      if (!(relative === "" && RESIDUE_SKIP_DIRECTORIES.has(entry.name))) {
         files.push(...listGeneratedFiles(root, child));
       }
     } else if (entry.isFile()) {
@@ -354,8 +367,22 @@ export function checkGenerated(destination, packageName, runner) {
       "pnpm",
       ["exec", "vitest", "run", "tests/product-section.test.ts"],
       destination,
+      { capture: true },
     );
-  } catch {
+  } catch (error) {
+    const output =
+      typeof error === "object" && error !== null && "output" in error
+        ? String(error.output)
+        : "";
+    // Red for any other reason (no test files, a config error) proves nothing.
+    if (!PRODUCT_FAILURE.test(output)) {
+      throw new Error(
+        `ERR_PRODUCT_SECTION_UNEXPECTED_FAILURE: generated ${packageName}'s tests/product-section.test.ts failed, but not on its ${PRODUCT_HEADING} rule.\n` +
+          `Output: ${output.trim().split("\n").slice(-20).join("\n")}\n` +
+          "Next: run the test in the retained repository and fix what stops it reaching the rule.",
+        { cause: error },
+      );
+    }
     productTestFailed = true;
   }
   if (!productTestFailed) {
@@ -366,7 +393,11 @@ export function checkGenerated(destination, packageName, runner) {
   }
   writeProductFixture(destination);
   runner("pnpm", ["run", "check"], destination);
-  const zip = path.join(".package", `${packageName}-0.0.0-crazygames.zip`);
+  const version = readKey(
+    parseJson(readFileSync(path.join(destination, "package.json"), "utf8")),
+    "version",
+  );
+  const zip = path.join(".package", `${packageName}-${String(version)}-crazygames.zip`);
   if (!existsSync(path.join(destination, zip))) {
     throw new Error(
       `ERR_PORTAL_ZIP_MISSING: generated ${packageName}'s pnpm check wrote no ${zip}.\n` +

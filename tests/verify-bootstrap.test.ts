@@ -457,6 +457,7 @@ describe("assertGenerated", () => {
     "docs/product/requirements.md",
     "docs/design/skill-drafts/x.md",
     "node_modules/pkg/index.js",
+    "dist/assets/index.js",
   ])("ignores the template name in %s", (relative) => {
     const destination = makeDestination();
     writeValidFixture(destination, "acme-game");
@@ -466,6 +467,18 @@ describe("assertGenerated", () => {
     writeFileSync(target, `<!-- my-game, My Game -->\n${previous}`);
 
     expect(() => assertGenerated(destination, "acme-game", TITLE)).not.toThrow();
+  });
+
+  it("scans a nested dist directory for the template name", () => {
+    const destination = makeDestination();
+    writeValidFixture(destination, "acme-game");
+    const relative = "apps/web/src/dist/extra.ts";
+    mkdirSync(path.dirname(path.join(destination, relative)), { recursive: true });
+    writeFileSync(path.join(destination, relative), "// my-game\n");
+
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
+      new RegExp(`ERR_TEMPLATE_NAME_REMAINING[\\s\\S]*${relative}:1`),
+    );
   });
 
   it.each([
@@ -512,12 +525,17 @@ describe("assertGenerated", () => {
   });
 });
 
-const ZIP = path.join(".package", "space-tiles-0.0.0-crazygames.zip");
+const PRODUCT_RED_OUTPUT =
+  "AssertionError: expected [ 'CLAUDE.md:12: TODO: What this game is, in one paragraph. — write ## Product from the game's requirements.' ] to deeply equal []";
 
 /** A runner whose `pnpm` behaves like a generated repository's would. */
 function fakePnpm(
   checks: { args: string[]; cwd: string; product: string }[],
-  { productTestFails = true, writesZip = true } = {},
+  {
+    productTestFails = true,
+    writesZip = true,
+    productOutput = PRODUCT_RED_OUTPUT,
+  } = {},
 ): (command: string, args: string[], cwd: string) => void {
   return (command, args, cwd) => {
     if (command !== "pnpm") {
@@ -527,21 +545,57 @@ function fakePnpm(
     const product = readFileSync(path.join(cwd, "CLAUDE.md"), "utf8");
     checks.push({ args, cwd, product });
     if (args[0] === "exec" && productTestFails) {
-      throw new Error("ERR_BOOTSTRAP_E2E: simulated red Product test");
+      throw Object.assign(new Error("ERR_BOOTSTRAP_E2E: simulated red Product test"), {
+        output: productOutput,
+      });
     }
     if (args[1] === "check" && writesZip) {
+      const { name, version } = JSON.parse(
+        readFileSync(path.join(cwd, "package.json"), "utf8"),
+      ) as { name: string; version: string };
       mkdirSync(path.join(cwd, ".package"), { recursive: true });
-      writeFileSync(path.join(cwd, ZIP), "");
+      writeFileSync(
+        path.join(cwd, ".package", `${name}-${version}-crazygames.zip`),
+        "",
+      );
     }
   };
 }
 
 describe("checkGenerated", () => {
-  function generated(): string {
+  function generated(version = "0.0.0"): string {
     const destination = makeDestination();
     writeFileSync(path.join(destination, "CLAUDE.md"), CLAUDE_MD);
+    writeFileSync(
+      path.join(destination, "package.json"),
+      JSON.stringify({ name: "space-tiles", version }),
+    );
     return destination;
   }
+
+  it.each(["No test files found, exiting with code 1", "Error: failed to load config"])(
+    "throws ERR_PRODUCT_SECTION_UNEXPECTED_FAILURE when the Product test fails with %j",
+    (productOutput) => {
+      const checks: { args: string[]; cwd: string; product: string }[] = [];
+      expect(() =>
+        checkGenerated(generated(), "space-tiles", fakePnpm(checks, { productOutput })),
+      ).toThrow(/ERR_PRODUCT_SECTION_UNEXPECTED_FAILURE/);
+      expect(checks.map(({ args }) => args[0])).toEqual(["install", "exec"]);
+    },
+  );
+
+  it("passes when the Product test fails on its rule and the zip carries package.json#version", () => {
+    const checks: { args: string[]; cwd: string; product: string }[] = [];
+    const destination = generated("1.2.3");
+    expect(() =>
+      checkGenerated(destination, "space-tiles", fakePnpm(checks)),
+    ).not.toThrow();
+    expect(
+      existsSync(
+        path.join(destination, ".package", "space-tiles-1.2.3-crazygames.zip"),
+      ),
+    ).toBe(true);
+  });
 
   it("throws ERR_PRODUCT_SECTION_UNCHECKED when the Product test passes unwritten", () => {
     const checks: { args: string[]; cwd: string; product: string }[] = [];
@@ -625,5 +679,22 @@ describe("main", () => {
     // assertGenerated. This exercises main()'s full orchestration and both
     // run()/assertGenerated() success paths without any mocking.
     expect(main()).toBe(0);
+  });
+});
+
+describe("PRODUCT_PLACEHOLDER", () => {
+  it("matches the template CLAUDE.md's ## Product placeholder lines", () => {
+    const lines = readFileSync(
+      path.join(import.meta.dirname, "..", "CLAUDE.md"),
+      "utf8",
+    ).split("\n");
+    const start = lines.indexOf("## Product");
+    expect(start).toBeGreaterThan(-1);
+    const rest = lines.slice(start + 1);
+    const end = rest.findIndex((line) => /^#{1,2}\s/.test(line));
+    const body = (end === -1 ? rest : rest.slice(0, end))
+      .map((line) => line.trim())
+      .filter((line) => line !== "");
+    expect(body).toEqual(PRODUCT_PLACEHOLDER);
   });
 });
