@@ -51,6 +51,7 @@ export class PlayScene extends Phaser.Scene {
   private ring!: FocusRing;
   private mirror: HTMLElement | null = null;
   private leaving = false;
+  private day: string | undefined;
 
   private readonly platform: Platform;
 
@@ -65,6 +66,7 @@ export class PlayScene extends Phaser.Scene {
     this.tiles = [];
     this.cursor = CURSOR_START;
     this.leaving = false;
+    this.day = data.day;
   }
 
   create(): void {
@@ -196,6 +198,10 @@ export class PlayScene extends Phaser.Scene {
       seed: finished.seed,
       headline: lines.headline,
       score: lines.score,
+      ...(this.day === undefined ? {} : { day: this.day }),
+      points: core.score(finished),
+      movesUsed: finished.movesUsed,
+      limit: finished.limit,
     } satisfies ResultData);
   }
 

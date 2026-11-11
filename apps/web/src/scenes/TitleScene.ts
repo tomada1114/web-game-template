@@ -1,8 +1,9 @@
 import * as Phaser from "phaser";
 
-import { GAME_TITLE } from "../game-info.js";
+import { dailyBoardSeed, titleLines } from "../daily/daily.js";
+import { GAME_SLUG, GAME_TITLE } from "../game-info.js";
 import { type Platform } from "../platform/platform.js";
-import { colors, layout, radius, type } from "../theme/tokens.js";
+import { colors, layout, radius, space, type } from "../theme/tokens.js";
 import { isActivation, moveFocus } from "../view/board-view.js";
 
 import { SceneKey, practiceSeed, type PlayData } from "./keys.js";
@@ -17,16 +18,18 @@ import {
   type Button,
 } from "./ui.js";
 
-/** The game's name, the Practice button and one line of how to play. */
+/** The game's name, the day and its best, Play daily and Practice, and one line of how to play. */
 export class TitleScene extends Phaser.Scene {
   private loadingStopped = false;
   private leaving = false;
 
   private readonly platform: Platform;
+  private readonly sessionDay: () => string;
 
-  constructor(platform: Platform) {
+  constructor(platform: Platform, sessionDay: () => string) {
     super(SceneKey.title);
     this.platform = platform;
+    this.sessionDay = sessionDay;
   }
 
   create(): void {
@@ -34,17 +37,35 @@ export class TitleScene extends Phaser.Scene {
     fadeIn(this);
     const cx = layout.designWidth / 2;
     const cy = layout.designHeight / 2;
-    addText(this, cx, cy - layout.tileSize * 2, GAME_TITLE, type.title);
+    const day = this.sessionDay();
+    const lines = titleLines(this.platform.storage, GAME_SLUG, day);
+    addText(this, cx, cy - layout.tileSize * 3, GAME_TITLE, type.title);
+    addText(this, cx, cy - layout.tileSize * 2, lines.daily, type.body);
+    if (lines.best !== null) {
+      addText(
+        this,
+        cx,
+        cy - layout.tileSize * 1.5,
+        lines.best,
+        type.caption,
+        colors.textMuted.css,
+      );
+    }
 
+    const pitch = layout.tapMin + space.unit * 2;
+    const top = cy - pitch / 2;
     addPanel(
       this,
       cx - layout.buttonWidth / 2,
-      cy - layout.tapMin / 2,
+      top - layout.tapMin / 2,
       layout.buttonWidth,
-      layout.tapMin,
+      layout.tapMin + pitch,
     );
     const buttons: Button[] = [
-      addButton(this, cx, cy, layout.buttonWidth, "Practice", true, () => {
+      addButton(this, cx, top, layout.buttonWidth, "Play daily", true, () => {
+        this.leave({ seed: dailyBoardSeed(day, GAME_SLUG), day });
+      }),
+      addButton(this, cx, top + pitch, layout.buttonWidth, "Practice", false, () => {
         this.leave({ seed: practiceSeed() });
       }),
     ];

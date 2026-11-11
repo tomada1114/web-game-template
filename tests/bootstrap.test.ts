@@ -532,6 +532,7 @@ describe("bootstrap generation", () => {
     // A module importing core by its scoped name must follow the rename, or its
     // import no longer resolves and the typed lint rules fail on it.
     for (const relative of [
+      "apps/web/src/daily/daily.ts",
       "apps/web/src/scenes/PlayScene.ts",
       "apps/web/src/view/board-view.ts",
       "apps/web/test/view/board-view.test.ts",

@@ -77,6 +77,7 @@ const PLACEHOLDER_TARGETS = [
   { file: "apps/web/package.json", placeholder: TEMPLATE_PACKAGE },
   { file: "apps/web/src/game-info.ts", placeholder: TEMPLATE_PACKAGE },
   { file: "apps/web/src/game-info.ts", placeholder: TEMPLATE_TITLE },
+  { file: "apps/web/src/daily/daily.ts", placeholder: TEMPLATE_PACKAGE },
   { file: "apps/web/src/scenes/PlayScene.ts", placeholder: TEMPLATE_PACKAGE },
   { file: "apps/web/src/view/board-view.ts", placeholder: TEMPLATE_PACKAGE },
   { file: "apps/web/test/view/board-view.test.ts", placeholder: TEMPLATE_PACKAGE },
