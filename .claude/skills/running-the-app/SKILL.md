@@ -22,7 +22,11 @@ Stop at the first tier that shows what the change does.
 
 1. **A test.** It exercises the same code as a live page and its result outlives the
    turn. If a lasting assertion would show the behavior, write one.
-2. **A server of your own, then `curl`,** for what only a listening process shows.
+2. **`pnpm test:e2e`,** for what only a browser shows on the built page. It builds,
+   serves on `E2E_PORT` (default 4173) with `strictPort`, and fails when the port is
+   taken. Set a distinct `E2E_PORT` per worktree, and never stop what holds the port.
+   The evidence is the test's own output.
+3. **A server of your own, then `curl`,** for what only a listening process shows.
    - Vite's dev server serves the page from source: that the entry resolves and
      transforms, and what the page's markup is.
    - `vite preview` serves the build in `apps/web/dist`, which is what a portal
