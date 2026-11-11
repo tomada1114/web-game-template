@@ -78,5 +78,12 @@ Layout tokens (`layout`, design px unless noted):
 | tile3 / surface                  | 5.14                      | 3.0    | pass   |
 | glyphOnTile / tile0–3            | 7.96 / 5.16 / 5.24 / 5.86 | 4.5    | pass   |
 
+`docs/design/contrast-pairs.json` lists every pair above as tokens and a `kind` (`text`
+4.5, `large` and `ui` 3.0), and `apps/web/test/theme/contrast-pairs.test.ts` recomputes
+each ratio from `apps/web/src/theme/tokens.ts`, failing `pnpm check` when a pair drops
+below its threshold or a colour token appears in no pair. It also asserts each pair's
+exact ratio to two decimals, so it fails on any ratio change: changing a colour means
+updating the recorded ratios in that test and in the tables above.
+
 `tile1` (`#2F8FD8`) is distinct from `accent` (`#56B4E9`), so no tile shares a colour
 with UI chrome.

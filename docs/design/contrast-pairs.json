@@ -1,0 +1,48 @@
+[
+  { "name": "text on bg", "fg": "text", "bg": "bg", "kind": "text" },
+  { "name": "text on surface", "fg": "text", "bg": "surface", "kind": "text" },
+  { "name": "textMuted on bg", "fg": "textMuted", "bg": "bg", "kind": "text" },
+  {
+    "name": "textMuted on surface",
+    "fg": "textMuted",
+    "bg": "surface",
+    "kind": "text"
+  },
+  { "name": "accent on bg (control, focus)", "fg": "accent", "bg": "bg", "kind": "ui" },
+  {
+    "name": "accent on surface (focus ring)",
+    "fg": "accent",
+    "bg": "surface",
+    "kind": "ui"
+  },
+  {
+    "name": "onAccent on accent (button label)",
+    "fg": "onAccent",
+    "bg": "accent",
+    "kind": "text"
+  },
+  { "name": "tile0 on surface", "fg": "tile0", "bg": "surface", "kind": "ui" },
+  { "name": "tile1 on surface", "fg": "tile1", "bg": "surface", "kind": "ui" },
+  { "name": "tile1 on bg", "fg": "tile1", "bg": "bg", "kind": "ui" },
+  { "name": "tile2 on surface", "fg": "tile2", "bg": "surface", "kind": "ui" },
+  { "name": "tile3 on surface", "fg": "tile3", "bg": "surface", "kind": "ui" },
+  {
+    "name": "glyphOnTile on tile0",
+    "fg": "glyphOnTile",
+    "bg": "tile0",
+    "kind": "text"
+  },
+  {
+    "name": "glyphOnTile on tile1",
+    "fg": "glyphOnTile",
+    "bg": "tile1",
+    "kind": "text"
+  },
+  {
+    "name": "glyphOnTile on tile2",
+    "fg": "glyphOnTile",
+    "bg": "tile2",
+    "kind": "text"
+  },
+  { "name": "glyphOnTile on tile3", "fg": "glyphOnTile", "bg": "tile3", "kind": "text" }
+]

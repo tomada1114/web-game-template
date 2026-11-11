@@ -56,7 +56,8 @@ description: >
   https://www.w3.org/TR/WCAG22/, checked 2026-11-05). Changing any colour re-runs every
   row of the contrast table in the lock, and the new ratios land in the same change. A
   failing pair is not merged. `docs/design/contrast-pairs.json` lists every pair with
-  its threshold, and a test recomputes each from `tokens.ts` and fails below it.
+  its `kind`, and `apps/web/test/theme/contrast-pairs.test.ts` recomputes each from
+  `tokens.ts` and fails below its threshold or when a colour token appears in no pair.
 - Measure pairs as they are drawn. A new element on a new background adds a row; a row
   for a pair that no longer appears is removed.
 - The focus ring is the pair most easily missed. `accent` against the tile colours is
