@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import { Buffer } from "node:buffer";
+import { spawnSync } from "node:child_process";
 import console from "node:console";
 import {
   existsSync,
   lstatSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -13,6 +15,7 @@ import path from "node:path";
 import process from "node:process";
 import { createInterface } from "node:readline/promises";
 
+import { isolatedGitEnv } from "./lib/git-env.mjs";
 import { isMain } from "./lib/is-main.mjs";
 import { parseJson, readKey, readString } from "./lib/json.mjs";
 
@@ -48,6 +51,17 @@ const SLUG_MAX_LENGTH = 60;
 const TITLE_MAX_COLUMNS = 59;
 const TITLE_HTML_MAX_COLUMNS = 69;
 const GENERATED_VERSION = "0.0.0";
+
+// `.template-origin` records where a generated repository came from. The
+// template checkout never carries one, so its presence is what marks a
+// repository as generated: the second-run refusal and
+// tests/product-section.test.ts both key on it, rather than on this script's
+// absence, which a broken template copy would share.
+export const ORIGIN_FILE = ".template-origin";
+export const TEMPLATE_URL = "https://github.com/tomada1114/web-game-template";
+// The root commit of the template's main. "Use this template" starts a new
+// history without it, so a commit is recorded only from a real clone.
+const TEMPLATE_ROOT_COMMIT = "bdd36049ca27e18448e93f864c99f12612dc010f";
 const GENERATED_CHANGELOG = `# Changelog
 
 All notable changes to this project are documented here.
@@ -937,15 +951,68 @@ function replaceTargets(root, replacements, write, preview) {
 }
 
 /**
+ * Run a read-only git query in `root`.
+ *
+ * @param {string} root
+ * @param {string[]} args
+ * @returns {string | undefined} Trimmed stdout, or `undefined` on failure.
+ */
+function gitQuery(root, args) {
+  const result = spawnSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    timeout: 30_000,
+    env: isolatedGitEnv(),
+  });
+  return result.status === 0 ? result.stdout.trim() : undefined;
+}
+
+/**
+ * Render `.template-origin` for the repository at `root`.
+ *
+ * @param {string} root
+ * @returns {string}
+ *
+ * @remarks
+ * Outside a git work tree whose top level is `root` (a plain copy, or a
+ * directory nested in some other repository), commit and tree are `unknown`.
+ */
+export function templateOrigin(root) {
+  let commit = "unknown";
+  let tree = "unknown";
+  const topLevel = gitQuery(root, ["rev-parse", "--show-toplevel"]);
+  if (topLevel !== undefined && realpathSync(topLevel) === realpathSync(root)) {
+    tree = gitQuery(root, ["rev-parse", "HEAD^{tree}"]) ?? "unknown";
+    const shallow = gitQuery(root, ["rev-parse", "--is-shallow-repository"]);
+    const roots = (gitQuery(root, ["rev-list", "--max-parents=0", "HEAD"]) ?? "").split(
+      "\n",
+    );
+    if (shallow === "false" && roots.includes(TEMPLATE_ROOT_COMMIT)) {
+      commit = gitQuery(root, ["rev-parse", "HEAD"]) ?? "unknown";
+    }
+  }
+  return [
+    "# Where this repository was cut from, written once by the template's bootstrap.",
+    "# Keep it committed: while it exists the bootstrap refuses a second run, and",
+    "# tests/product-section.test.ts reads it to treat this repository as a game.",
+    `template: ${TEMPLATE_URL}`,
+    `commit: ${commit}`,
+    `tree: ${tree}`,
+    "",
+  ].join("\n");
+}
+
+/**
  * Apply the metadata changes directly to the supplied repository.
  *
  * @param {string} root
  * @param {ReturnType<typeof parseArguments>} options
  * @param {number} year
+ * @param {string} origin - The `.template-origin` content to write.
  * @param {Map<string, string | null>} [preview]
  * @returns {string[]}
  */
-function transform(root, options, year, preview) {
+function transform(root, options, year, origin, preview) {
   const repository = `${options.githubUser}/${options.packageName}`;
   /** @type {Map<string, string>} */
   const replacements = new Map([
@@ -1058,6 +1125,14 @@ function transform(root, options, year, preview) {
   }
   changed.push("CHANGELOG.md");
 
+  if (write) {
+    writeFileSync(path.join(root, ORIGIN_FILE), origin);
+  }
+  if (preview !== undefined) {
+    preview.set(ORIGIN_FILE, origin);
+  }
+  changed.push(ORIGIN_FILE);
+
   return [...new Set(changed)].sort();
 }
 
@@ -1067,6 +1142,13 @@ function transform(root, options, year, preview) {
  * @param {string} root
  */
 function assertTemplate(root) {
+  if (existsSync(path.join(root, ORIGIN_FILE))) {
+    throw new BootstrapError(
+      "ERR_ALREADY_BOOTSTRAPPED",
+      `${ORIGIN_FILE} exists, so this repository was already bootstrapped.\n` +
+        "Next: nothing to run; the bootstrap runs once per repository.",
+    );
+  }
   const manifest = readObject(path.join(root, "package.json"));
   const currentName = readString(manifest, "name");
   if (currentName !== TEMPLATE_PACKAGE) {
@@ -1143,7 +1225,8 @@ export function bootstrap(
   // repository half-migrated with no bootstrap script left to fix and rerun.
   /** @type {Map<string, string | null>} */
   const preview = new Map();
-  const changed = transform(root, { ...options, dryRun: true }, year, preview);
+  const origin = templateOrigin(root);
+  const changed = transform(root, { ...options, dryRun: true }, year, origin, preview);
 
   const placeholders = findPlaceholders(root, preview);
   if (placeholders.length > 0) {
@@ -1157,7 +1240,7 @@ export function bootstrap(
   if (options.dryRun) {
     return changed;
   }
-  return transform(root, options, year);
+  return transform(root, options, year, origin);
 }
 
 /**
@@ -1222,7 +1305,7 @@ export async function main(argv) {
     console.log(
       options.dryRun
         ? "No repository files were changed."
-        : "Next: run `pnpm install --frozen-lockfile`, then `pnpm check`.",
+        : "Next: run `pnpm install --frozen-lockfile`, write CLAUDE.md's `## Product`, then `pnpm check`.",
     );
     return 0;
   } catch (error) {

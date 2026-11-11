@@ -24,6 +24,7 @@ const automationTests = [
   "tests/labels.test.ts",
   "tests/node-tools.test.ts",
   "tests/package-crazygames.test.ts",
+  "tests/product-section.test.ts",
   "tests/skills-frontmatter.test.ts",
   "tests/sync-labels.test.ts",
   "tests/template-self.test.ts",

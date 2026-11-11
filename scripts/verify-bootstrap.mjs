@@ -7,21 +7,50 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-import { MARKER_TARGETS, escapeHtml, findPlaceholders } from "./bootstrap.mjs";
+import {
+  MARKER_TARGETS,
+  ORIGIN_FILE,
+  TEMPLATE_URL,
+  escapeHtml,
+  findPlaceholders,
+} from "./bootstrap.mjs";
 import { isolatedGitEnv } from "./lib/git-env.mjs";
 import { isMain } from "./lib/is-main.mjs";
 import { parseJson, readKey } from "./lib/json.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const LEGACY_RELEASE_DIRECTORY = ".change" + "set";
+
+// The template's own name and title. Planning records and the changelog may
+// still name them; every other generated file must carry the new ones.
+const TEMPLATE_NAMES = ["my-game", "My Game"];
+const RESIDUE_EXEMPT_FILES = new Set(["CHANGELOG.md"]);
+const RESIDUE_EXEMPT_PREFIXES = ["docs/product/", "docs/design/"];
+const RESIDUE_SKIP_DIRECTORIES = new Set([".git", "node_modules", ".package", "dist"]);
+
+// The template's `## Product` placeholder, which the bootstrap must leave as
+// it is: a generated repository's first task is to replace it.
+const PRODUCT_HEADING = "## Product";
+export const PRODUCT_PLACEHOLDER = [
+  "TODO: What this game is, in one paragraph.",
+  "TODO: Who it is for, and the core interaction.",
+  "TODO: Non-goals, copied verbatim from docs/product/requirements.md.",
+  "TODO: Where decisions live: docs/product/requirements.md and the skills.",
+];
+const PRODUCT_FIXTURE = [
+  "Space Tiles is the fixture game bootstrap:check writes to prove the gate turns green.",
+  "It is for nobody; the core interaction is running the full gate once.",
+];
 
 /**
  * @param {string} command
@@ -160,6 +189,190 @@ export function assertGenerated(destination, packageName, title) {
   }
 
   assertRenamedWorkspace(destination, packageName, title);
+  assertNoTemplateNames(destination, packageName);
+  assertOrigin(destination, packageName);
+  assertProductPlaceholder(destination, packageName);
+}
+
+/**
+ * List every regular file under `root` as a forward-slash relative path,
+ * skipping dependency, VCS and build directories.
+ *
+ * @param {string} root
+ * @param {string} [relative]
+ * @returns {string[]}
+ */
+function listGeneratedFiles(root, relative = "") {
+  /** @type {string[]} */
+  const files = [];
+  for (const entry of readdirSync(path.join(root, relative), { withFileTypes: true })) {
+    const child = relative === "" ? entry.name : `${relative}/${entry.name}`;
+    if (entry.isDirectory()) {
+      if (!RESIDUE_SKIP_DIRECTORIES.has(entry.name)) {
+        files.push(...listGeneratedFiles(root, child));
+      }
+    } else if (entry.isFile()) {
+      files.push(child);
+    }
+  }
+  return files;
+}
+
+/**
+ * @param {string} destination
+ * @param {string} packageName
+ */
+function assertNoTemplateNames(destination, packageName) {
+  /** @type {string[]} */
+  const found = [];
+  for (const relative of listGeneratedFiles(destination)) {
+    if (
+      RESIDUE_EXEMPT_FILES.has(relative) ||
+      RESIDUE_EXEMPT_PREFIXES.some((prefix) => relative.startsWith(prefix))
+    ) {
+      continue;
+    }
+    const buffer = readFileSync(path.join(destination, relative));
+    if (buffer.includes(0)) {
+      continue;
+    }
+    buffer
+      .toString("utf8")
+      .split("\n")
+      .forEach((line, index) => {
+        for (const name of TEMPLATE_NAMES) {
+          if (line.includes(name)) {
+            found.push(`${relative}:${String(index + 1)}: ${name}`);
+          }
+        }
+      });
+  }
+  if (found.length > 0) {
+    throw new Error(
+      `ERR_TEMPLATE_NAME_REMAINING: generated ${packageName} still names the template.\n` +
+        found.join("\n") +
+        "\nNext: list each file in bootstrap.mjs's PLACEHOLDER_TARGETS, then rerun bootstrap:e2e.",
+    );
+  }
+}
+
+/**
+ * @param {string} destination
+ * @param {string} packageName
+ */
+function assertOrigin(destination, packageName) {
+  const file = path.join(destination, ORIGIN_FILE);
+  const lines = existsSync(file) ? readFileSync(file, "utf8").split("\n") : [];
+  if (!lines.includes(`template: ${TEMPLATE_URL}`)) {
+    throw new Error(
+      `ERR_TEMPLATE_ORIGIN_MISSING: generated ${packageName} has no ${ORIGIN_FILE} naming ${TEMPLATE_URL}.\n` +
+        "Next: write it from transform() in scripts/bootstrap.mjs, then rerun bootstrap:e2e.",
+    );
+  }
+}
+
+/**
+ * Return the lines between CLAUDE.md's `## Product` heading and the next
+ * heading, or `undefined` when there is no such heading.
+ *
+ * @param {string} text
+ * @returns {{ start: number, end: number, lines: string[] } | undefined}
+ */
+function productSection(text) {
+  const lines = text.split("\n");
+  const start = lines.indexOf(PRODUCT_HEADING);
+  if (start === -1) {
+    return undefined;
+  }
+  let end = start + 1;
+  while (end < lines.length && !/^#{1,2}\s/.test(lines[end] ?? "")) {
+    end++;
+  }
+  return { start, end, lines };
+}
+
+/**
+ * @param {string} destination
+ * @param {string} packageName
+ */
+function assertProductPlaceholder(destination, packageName) {
+  const section = productSection(
+    readFileSync(path.join(destination, "CLAUDE.md"), "utf8"),
+  );
+  const body = section?.lines
+    .slice(section.start + 1, section.end)
+    .map((line) => line.trim())
+    .filter((line) => line !== "");
+  if (JSON.stringify(body) !== JSON.stringify(PRODUCT_PLACEHOLDER)) {
+    throw new Error(
+      `ERR_PRODUCT_PLACEHOLDER_CHANGED: generated ${packageName}'s CLAUDE.md ${PRODUCT_HEADING} is not the template's placeholder.\n` +
+        `Expected: ${PRODUCT_PLACEHOLDER.join(" / ")}\n` +
+        `Actual: ${body === undefined ? "no heading" : body.join(" / ")}\n` +
+        "Next: restore the placeholder in the template's CLAUDE.md, or stop bootstrap rewriting it.",
+    );
+  }
+}
+
+/**
+ * Replace the generated CLAUDE.md's `## Product` body with a fixture, as a
+ * game's kickoff would.
+ *
+ * @param {string} destination
+ */
+export function writeProductFixture(destination) {
+  const file = path.join(destination, "CLAUDE.md");
+  const section = productSection(readFileSync(file, "utf8"));
+  if (section === undefined) {
+    throw new Error(`ERR_PRODUCT_SECTION_MISSING: ${file} has no ${PRODUCT_HEADING}.`);
+  }
+  const { start, end, lines } = section;
+  writeFileSync(
+    file,
+    [
+      ...lines.slice(0, start + 1),
+      "",
+      ...PRODUCT_FIXTURE,
+      "",
+      ...lines.slice(end),
+    ].join("\n"),
+  );
+}
+
+/**
+ * Install the generated repository, prove its Product-section test is red,
+ * write the section, and require the full gate and the portal zip.
+ *
+ * @param {string} destination
+ * @param {string} packageName
+ * @param {typeof run} runner
+ */
+export function checkGenerated(destination, packageName, runner) {
+  runner("pnpm", ["install", "--frozen-lockfile"], destination);
+  let productTestFailed = false;
+  try {
+    runner(
+      "pnpm",
+      ["exec", "vitest", "run", "tests/product-section.test.ts"],
+      destination,
+    );
+  } catch {
+    productTestFailed = true;
+  }
+  if (!productTestFailed) {
+    throw new Error(
+      `ERR_PRODUCT_SECTION_UNCHECKED: generated ${packageName} passes tests/product-section.test.ts with its ${PRODUCT_HEADING} unwritten.\n` +
+        `Next: make the test fail while ${ORIGIN_FILE} exists and a TODO: line remains.`,
+    );
+  }
+  writeProductFixture(destination);
+  runner("pnpm", ["run", "check"], destination);
+  const zip = path.join(".package", `${packageName}-0.0.0-crazygames.zip`);
+  if (!existsSync(path.join(destination, zip))) {
+    throw new Error(
+      `ERR_PORTAL_ZIP_MISSING: generated ${packageName}'s pnpm check wrote no ${zip}.\n` +
+        "Next: check package:crazygames names the zip from package.json#name and #version.",
+    );
+  }
 }
 
 /**
@@ -293,8 +506,8 @@ export function main(argv = [], runner = run) {
   const workspace = mkdtempSync(path.join(tmpdir(), "typescript-template-e2e-"));
   let passed = false;
   try {
-    const packageName = "acme-game";
-    const title = "Acme Game";
+    const packageName = "space-tiles";
+    const title = "Space Tiles";
     const destination = path.join(workspace, packageName);
     mkdirSync(destination);
     copyTemplate(destination);
@@ -316,8 +529,7 @@ export function main(argv = [], runner = run) {
     );
     assertGenerated(destination, packageName, title);
     if (argv[0] === "--check") {
-      runner("pnpm", ["install", "--frozen-lockfile"], destination);
-      runner("pnpm", ["run", "check"], destination);
+      checkGenerated(destination, packageName, runner);
     }
     console.log(`bootstrap-e2e: ${packageName} passed`);
     passed = true;

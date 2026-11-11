@@ -20,6 +20,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   BootstrapError,
+  ORIGIN_FILE,
+  TEMPLATE_URL,
   bootstrap,
   escapeHtml,
   findPlaceholders,
@@ -27,6 +29,7 @@ import {
   normalizeRelativePath,
   parseArguments,
   promptArguments,
+  templateOrigin,
   validatePackageName,
   validateTitle,
 } from "../scripts/bootstrap.mjs";
@@ -939,8 +942,10 @@ describe("bootstrap generation", () => {
       "utf8",
     );
 
-    expect(source).not.toContain('from "node:child_process"');
-    expect(source).not.toContain("spawnSync");
+    // The only subprocess is the read-only git query behind .template-origin.
+    expect(source.match(/spawnSync\([^,]+/g)).toEqual(['spawnSync("git"']);
+    expect(source).not.toMatch(/"(?:add|commit|stash|reset|checkout|update-index)"/);
+    expect(source).not.toMatch(/"(?:pnpm|npm|npx|yarn)"/);
     expect(source).not.toContain("mkdtempSync");
     expect(source).not.toContain("regenerateLockfile");
     expect(source).not.toContain("corepack");
@@ -1019,6 +1024,92 @@ describe("bootstrap generation", () => {
     const before = readFileSync(path.join(root, "package.json"), "utf8");
     expect(() => bootstrap(root, options("twice"))).toThrow(/ERR_ALREADY_BOOTSTRAPPED/);
     expect(readFileSync(path.join(root, "package.json"), "utf8")).toBe(before);
+  });
+});
+
+describe("the template origin record", () => {
+  function git(cwd: string, ...args: string[]): string {
+    return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
+  }
+
+  function commitAll(root: string): void {
+    git(root, "init", "--quiet", "--initial-branch=main");
+    git(root, "add", "-A");
+    git(
+      root,
+      "-c",
+      "user.name=Fixture",
+      "-c",
+      "user.email=fixture@example.com",
+      "-c",
+      "commit.gpgsign=false",
+      "commit",
+      "--quiet",
+      "--no-verify",
+      "-m",
+      "fixture",
+    );
+  }
+
+  it("writes the template URL and unknown commit and tree outside a git work tree", () => {
+    const root = copyTemplate();
+    expect(existsSync(path.join(root, ORIGIN_FILE))).toBe(false);
+    bootstrap(root, options("origin-copy"));
+    const origin = readFileSync(path.join(root, ORIGIN_FILE), "utf8");
+    const lines = origin.split("\n");
+    expect(lines.filter((line) => line.startsWith("#")).join(" ")).toMatch(
+      /bootstrap[\s\S]*committed[\s\S]*second run[\s\S]*tests\/product-section\.test\.ts/,
+    );
+    expect(lines.filter((line) => !line.startsWith("#"))).toEqual([
+      `template: ${TEMPLATE_URL}`,
+      "commit: unknown",
+      "tree: unknown",
+      "",
+    ]);
+  });
+
+  it("does not write the origin record in a dry run", () => {
+    const root = copyTemplate();
+    bootstrap(root, { ...options("origin-dry"), dryRun: true });
+    expect(existsSync(path.join(root, ORIGIN_FILE))).toBe(false);
+  });
+
+  it("records the tree but not the commit of a history the template did not start", () => {
+    const root = copyTemplate();
+    commitAll(root);
+    const origin = templateOrigin(root);
+    expect(origin).toContain("commit: unknown\n");
+    expect(origin).toContain(`tree: ${git(root, "rev-parse", "HEAD^{tree}")}\n`);
+  });
+
+  it("records the commit of a full clone of the template, and not of a shallow one", () => {
+    const workspace = mkdtempSync(path.join(tmpdir(), "typescript-template-clone-"));
+    workspaces.push(workspace);
+    const source = `file://${repoRoot}`;
+    git(workspace, "clone", "--quiet", "--no-hardlinks", source, "full");
+    git(workspace, "clone", "--quiet", "--depth=1", source, "shallow");
+    const full = path.join(workspace, "full");
+    const shallow = path.join(workspace, "shallow");
+
+    expect(templateOrigin(full)).toContain(
+      `commit: ${git(full, "rev-parse", "HEAD")}\n`,
+    );
+    expect(templateOrigin(shallow)).toContain("commit: unknown\n");
+    expect(templateOrigin(shallow)).toContain(
+      `tree: ${git(shallow, "rev-parse", "HEAD^{tree}")}\n`,
+    );
+  });
+
+  it("refuses to run while the origin record exists and changes no file", () => {
+    const root = copyTemplate();
+    writeFileSync(path.join(root, ORIGIN_FILE), "template: earlier\n");
+    const before = readFileSync(path.join(root, "package.json"), "utf8");
+    expect(() => bootstrap(root, options("again"))).toThrow(/ERR_ALREADY_BOOTSTRAPPED/);
+    expect(readFileSync(path.join(root, "package.json"), "utf8")).toBe(before);
+    expect(readFileSync(path.join(root, ORIGIN_FILE), "utf8")).toBe(
+      "template: earlier\n",
+    );
+    expect(existsSync(path.join(root, "scripts", "bootstrap.mjs"))).toBe(true);
   });
 });
 
@@ -1111,7 +1202,7 @@ describe("main", () => {
     ).resolves.toBe(0);
     expect(out[0]).toBe("Bootstrapped real-library.");
     expect(out.at(-1)).toBe(
-      "Next: run `pnpm install --frozen-lockfile`, then `pnpm check`.",
+      "Next: run `pnpm install --frozen-lockfile`, write CLAUDE.md's `## Product`, then `pnpm check`.",
     );
     expect(existsSync(path.join(root, "scripts", "bootstrap.mjs"))).toBe(false);
   });
