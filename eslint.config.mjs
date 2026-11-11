@@ -53,6 +53,55 @@ const DOM_GLOBALS = [
   "alert",
 ];
 
+/**
+ * Globals whose value differs between runs, locales, or devices. `window` and
+ * `document` are already in DOM_GLOBALS, so they are not repeated here: a
+ * second entry would report the same reference twice.
+ */
+const NON_DETERMINISTIC_GLOBALS = [
+  "Date",
+  "performance",
+  "crypto",
+  "setTimeout",
+  "setInterval",
+  "Intl",
+  "globalThis",
+];
+
+/**
+ * `Math` members that ECMA-262 §21.3.2 lets an engine approximate, plus
+ * `random`. Allowed and exactly specified: floor, abs, min, max, imul, sqrt,
+ * trunc, sign, clz32, round.
+ */
+const NON_DETERMINISTIC_MATH = [
+  "random",
+  "sin",
+  "cos",
+  "tan",
+  "asin",
+  "acos",
+  "atan",
+  "atan2",
+  "sinh",
+  "cosh",
+  "tanh",
+  "asinh",
+  "acosh",
+  "atanh",
+  "exp",
+  "expm1",
+  "log",
+  "log1p",
+  "log2",
+  "log10",
+  "pow",
+  "cbrt",
+  "hypot",
+];
+
+const DETERMINISM_MESSAGE =
+  "packages/core must replay identically on every engine: see docs/design/skill-drafts/writing-game-core.md. Pass the value in from apps/web, or write it in integers.";
+
 export default defineConfig([
   // Only generated trees are ignored; everything hand-written is linted,
   // including repository automation, config files, and `.claude/skills/`.
@@ -176,6 +225,36 @@ export default defineConfig([
           message:
             'packages/core runs without a DOM: see "Architecture" in CLAUDE.md. Read the value in apps/web and pass it in.',
         })),
+        ...NON_DETERMINISTIC_GLOBALS.map((name) => ({
+          name,
+          message: DETERMINISM_MESSAGE,
+        })),
+      ],
+      "no-restricted-properties": [
+        "error",
+        ...NON_DETERMINISTIC_MATH.map((property) => ({
+          object: "Math",
+          property,
+          message: DETERMINISM_MESSAGE,
+        })),
+      ],
+      // Options replace rather than merge across config objects, so the
+      // `export *` ban from source/explicit-exports is restated here.
+      "no-restricted-syntax": [
+        "error",
+        NO_EXPORT_STAR,
+        {
+          selector: "CallExpression[callee.property.name='localeCompare']",
+          message: `localeCompare depends on the locale; compare code units with <. ${DETERMINISM_MESSAGE}`,
+        },
+        {
+          selector: "BinaryExpression[operator='**']",
+          message: `\`**\` is Math.pow, which engines approximate. ${DETERMINISM_MESSAGE}`,
+        },
+        {
+          selector: "AssignmentExpression[operator='**=']",
+          message: `\`**=\` is Math.pow, which engines approximate. ${DETERMINISM_MESSAGE}`,
+        },
       ],
     },
   },
