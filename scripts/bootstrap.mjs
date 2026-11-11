@@ -142,6 +142,7 @@ const SELF_REMOVED_PATHS = [
 // the template.
 const AI_LAYER_TARGETS = [
   "CLAUDE.md",
+  ".claude/rules/architecture.md",
   ".claude/rules/dependencies.md",
   ".claude/rules/gates.md",
   ".claude/rules/guidance.md",
