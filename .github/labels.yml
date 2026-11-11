@@ -47,9 +47,18 @@
 - name: "blocked: dependency"
   color: f9d0c4
   description: "Waits on a specific open issue named by a Depends on: #N line."
+- name: "blocked: external"
+  color: d876e3
+  description: "Needs a step only a person can take (an account, a purchase, a signing identity)."
 - name: "on hold"
   color: cccccc
-  description: "Not implementable as filed, or parked pending something outside the tracker."
+  description: "Real work parked on purpose; the reason is in a comment."
+
+# Tracking label: an issue that is a checklist of sub-issues, never work
+# itself. `shipping-issues` drops it before ranking, so it carries no tier.
+- name: tracking
+  color: bfdadc
+  description: "A tracking issue: its sub-issues carry the work; never shipped itself."
 
 # Changelog-only labels: used by .github/release.yml's categories and applied
 # by .github/workflows/pr-label.yml from a PR's Conventional Commit type.

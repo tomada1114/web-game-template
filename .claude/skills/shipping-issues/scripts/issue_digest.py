@@ -32,6 +32,13 @@ what it waits on, what it blocks, and which paths it touches. A declared tier
 is settled, not suggested; declared paths are what make the parallel-grouping
 decision a set intersection rather than a guess.
 
+An issue labelled `tracking` is a checklist of sub-issues, not work. It is
+dropped before ranking: never selected (not even by `--issue N`), never counted
+in the label or contract coverage, never offered a tier to backfill. It is
+listed on a `tracking:` line (`tracking_issues` in `--json`) so the caller ships
+its sub-issues instead. Its dependency edges stay: an issue that says it waits
+on a tracking issue remains BLOCKED-BY it.
+
 Usage:
     issue_digest.py [--label L]... [--assignee A] [--milestone M]
                     [--issue N]... [--limit N] [--body-chars N]
@@ -174,6 +181,12 @@ READY_NEGATIVE_LABELS = {
     "wip",
     "draft",
 }
+
+# A tracking issue is not held back, it is not a candidate at all: main() drops
+# it before ranking instead of ranking it and marking it not ready. That is the
+# difference from READY_NEGATIVE_LABELS, whose issues are real work that keeps
+# its tier and waits. normalize_label() output, like every set here.
+TRACKING_LABELS = {"tracking"}
 
 # The design-not-settled label is a *soft* block, unlike READY_NEGATIVE_LABELS:
 # it is excluded from automatic selection by default, but an explicit issue
@@ -702,11 +715,17 @@ def main() -> int:
 
     wanted = set(args.issue)
     records = []
+    tracking_issues: list[int] = []
     for it in issues:
         num = it["number"]
         if wanted and num not in wanted:
             continue
         labels = [lbl["name"] for lbl in it.get("labels", [])]
+        # Dropped here rather than in the fetch: `all_deps` and `open_numbers`
+        # above still hold it, so an edge onto a tracking issue keeps blocking.
+        if any(normalize_label(lbl) in TRACKING_LABELS for lbl in labels):
+            tracking_issues.append(num)
+            continue
         body = it.get("body") or ""
         deps = all_deps[num]
         blockers = [lbl for lbl in labels
@@ -820,6 +839,7 @@ def main() -> int:
             },
         },
         "needs_design": [r["number"] for r in needs_design],
+        "tracking_issues": sorted(tracking_issues),
         "stale_dependency_labels": [r["number"] for r in stale_dependency],
         "ranking": [
             {"number": r["number"], "title": r["title"],
@@ -844,6 +864,11 @@ def main() -> int:
 
     cov = payload["label_coverage"]
     ccov = payload["contract_coverage"]
+    tracking_line = (
+        "tracking: " + ", ".join(f"#{n}" for n in payload["tracking_issues"])
+        + " — never shipped; ship the sub-issues instead"
+        if payload["tracking_issues"] else ""
+    )
     # `contract: N` only earns a slot on the line when some issue actually has
     # one — a repo that has not adopted the block should not read a running
     # complaint about it on every call.
@@ -974,6 +999,8 @@ def main() -> int:
             print("held: " + ", ".join(
                 f"#{r['number']}[{tier_cell(r)}] {r['readiness']}" for r in held[:10])
                 + more)
+        if tracking_line:
+            print(tracking_line)
         if args.with_rank:
             print()
             print_rank_table()
@@ -992,6 +1019,8 @@ def main() -> int:
         return 0
 
     print(f"# Open issues ({len(records)}) · open PRs ({len(prs)})\n")
+    if tracking_line:
+        print(tracking_line + "\n")
     if not records:
         print("_No open issues match the filter._")
         return 0

@@ -35,6 +35,14 @@ function extractLabelArrays(text: string): string[] {
   return labels;
 }
 
+/**
+ * The label each row of the `triaging-issues` skill's tables defines: the
+ * backticked name in the row's first cell.
+ */
+function extractDefinedLabels(skill: string): string[] {
+  return [...skill.matchAll(/^\| `([^`]+)`\s*\|/gm)].map((match) => match[1] ?? "");
+}
+
 describe("label taxonomy", () => {
   const manifest = parseLabelManifest(
     readFileSync(path.join(githubDir, "labels.yml"), "utf8"),
@@ -56,6 +64,31 @@ describe("label taxonomy", () => {
       expect(label.description.length).toBeGreaterThan(0);
     },
   );
+
+  // Without these two, an issue only its owner can act on and a checklist of
+  // sub-issues have nothing to carry but `on hold`, which `shipping-issues`
+  // reads as real work that is merely parked.
+  it.each(["blocked: external", "tracking"])("declares %s", (name) => {
+    expect(manifestNames.has(name)).toBe(true);
+  });
+
+  // The manifest holds a label's name and colour; the skill holds what it
+  // means. A label in one and not the other is either applied without a
+  // meaning or defined and silently dropped by GitHub.
+  const triagingSkill = readFileSync(
+    path.join(repoRoot, ".claude", "skills", "triaging-issues", "SKILL.md"),
+    "utf8",
+  );
+
+  it.each([...manifestNames])("%s is named in the triaging-issues skill", (name) => {
+    expect(triagingSkill).toContain(`\`${name}\``);
+  });
+
+  it("declares every label the triaging-issues skill's tables define", () => {
+    const defined = extractDefinedLabels(triagingSkill);
+    expect(defined.length).toBeGreaterThan(0);
+    expect(defined.filter((name) => !manifestNames.has(name))).toEqual([]);
+  });
 
   const issueTemplateDir = path.join(githubDir, "ISSUE_TEMPLATE");
   const templateFiles = readdirSync(issueTemplateDir).filter(

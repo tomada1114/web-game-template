@@ -690,6 +690,109 @@ class ContractIntegrationTest(DigestRunner, unittest.TestCase):
         self.assertIn("partial: #2 — no blocked-by,touches", out)
 
 
+class NeverShippedLabelsTest(DigestRunner, unittest.TestCase):
+    """`on hold` and `blocked: external` hold an issue back; `tracking` takes
+    it out of the ranking altogether, because a tracking issue is a checklist
+    of sub-issues and ranks nothing."""
+
+    def test_on_hold_issue_is_never_selected(self):
+        issues = [
+            gh_issue(1, title="parked", labels=["priority: P0", "on hold"]),
+            gh_issue(2, title="ready", labels=["priority: P3"]),
+        ]
+        rc, out, err = self._run(["--select"], issues)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("select: #2", out)
+        self.assertIn("#1[P0] LABEL:on hold", out)
+
+    def test_blocked_external_issue_is_never_selected(self):
+        issues = [
+            gh_issue(1, title="needs the owner",
+                     labels=["priority: P0", "blocked: external"]),
+            gh_issue(2, title="ready", labels=["priority: P3"]),
+        ]
+        rc, out, err = self._run(["--select"], issues)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("select: #2", out)
+        self.assertIn("#1[P0] LABEL:blocked: external", out)
+
+    def test_tracking_issue_is_never_selected(self):
+        issues = [
+            gh_issue(1, title="roadmap", labels=["chore", "tracking"],
+                     body="CI is broken, a blocker for everything"),
+            gh_issue(2, title="ready", labels=["priority: P3"]),
+        ]
+        rc, out, err = self._run(["--select"], issues)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("select: #2", out)
+        self.assertIn("tracking: #1", out)
+        self.assertNotIn("held:", out)
+
+    def test_tracking_issue_is_not_selected_even_when_named(self):
+        issues = [gh_issue(1, title="roadmap", labels=["tracking", "priority: P0"])]
+        rc, out, err = self._run(["--select", "--issue", "1"], issues)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("select: none", out)
+        self.assertIn("tracking: #1", out)
+
+    def test_tracking_label_is_matched_whatever_its_case(self):
+        issues = [gh_issue(1, title="roadmap", labels=["Tracking"])]
+        rc, out, err = self._run(["--select", "--json"], issues)
+        self.assertEqual(json.loads(out)["tracking_issues"], [1])
+
+    def test_tracking_issue_is_never_ranked_or_offered_a_tier(self):
+        issues = [
+            gh_issue(1, title="roadmap", labels=["tracking"]),
+            gh_issue(2, title="ready", labels=["priority: P2"]),
+        ]
+        rc, out, err = self._run(["--select", "--json"], issues)
+        self.assertEqual(rc, 0, err)
+        payload = json.loads(out)
+        self.assertEqual(payload["tracking_issues"], [1])
+        self.assertEqual([r["number"] for r in payload["ranking"]], [2])
+        # `issues` is what apply_priority_labels.py --backfill walks.
+        self.assertEqual([i["number"] for i in payload["issues"]], [2])
+        self.assertEqual(payload["open_issue_count"], 1)
+        coverage = payload["label_coverage"]
+        self.assertTrue(coverage["complete"])
+        self.assertEqual(coverage["total"], 1)
+        self.assertEqual(coverage["unranked"], [])
+
+    def test_tracking_issue_needs_no_ship_contract(self):
+        issues = [
+            gh_issue(1, title="roadmap", labels=["tracking"]),
+            gh_issue(2, body=CONTRACT),
+        ]
+        rc, out, err = self._run(["--audit"], issues)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("contract: 1/1 complete", out)
+        self.assertNotIn("missing: #1", out)
+
+    def test_an_issue_waiting_on_a_tracking_issue_stays_blocked(self):
+        # Dropping the tracking issue from the ranking must not drop the edge:
+        # a silently unblocked issue would be picked ahead of what it waits on.
+        issues = [
+            gh_issue(1, title="roadmap", labels=["tracking"]),
+            gh_issue(2, title="waits", labels=["priority: P0"],
+                     body="depends on #1"),
+        ]
+        rc, out, err = self._run(["--select"], issues)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("select: none", out)
+        self.assertIn("#2[P0] BLOCKED-BY:#1", out)
+
+    def test_full_digest_lists_tracking_issues_on_their_own_line(self):
+        issues = [
+            gh_issue(1, title="roadmap", labels=["tracking"]),
+            gh_issue(2, title="ready", labels=["priority: P2"]),
+        ]
+        rc, out, err = self._run([], issues)
+        self.assertEqual(rc, 0, err)
+        self.assertIn("# Open issues (1)", out)
+        self.assertIn("tracking: #1", out)
+        self.assertNotIn("## #1 ", out)
+
+
 class ComposableOutputTest(DigestRunner, unittest.TestCase):
     """--select composing with --with-rank/--detail is what collapses a
     startup's three digest calls into one."""

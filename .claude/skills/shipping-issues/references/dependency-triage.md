@@ -42,6 +42,12 @@ An issue that fails 1 or 5 is **not** implemented silently. Report it as
 `NEEDS-CLARIFICATION` with the specific missing information, and move on to the next
 candidate.
 
+A `tracking` issue never reaches this gate. It is a checklist of sub-issues, so the
+digest drops it before ranking and names it on the `tracking:` line: it is never
+selected, not even by its number, and never offered a tier. Ship its sub-issues. An
+`on hold` or `blocked: external` issue is different: it is real work that keeps its tier
+and waits as a `NOT-READY-LABEL`.
+
 ## Dependency edges the regex misses
 
 `issue_digest.py` catches explicit `#N` references and common EN/JA dependency
