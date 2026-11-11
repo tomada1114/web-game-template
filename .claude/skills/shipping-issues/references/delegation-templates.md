@@ -2,7 +2,7 @@
 
 ## Table of Contents
 
-- [Priority research and labeling](#priority-research-and-labeling-sonnet)
+- [Priority research and labeling](#priority-research-and-labeling-executor)
 - [Implementation](#implementation-step-3)
 - [Review fix, parallel mode](#review-fix-parallel-mode)
 - [Review fallback](#review-fallback)
@@ -64,7 +64,7 @@ The design agent is the one named exception to the first rule: it writes two spe
 things to GitHub (a design comment, a label clear) as its whole purpose, spelled out in
 its own template.
 
-## Priority research and labeling (`sonnet`)
+## Priority research and labeling (`executor`)
 
 Spawned only when more than ~3 open issues still lack a `priority:` label, or when the
 top rows of a labeled backlog are close enough that the pick needs evidence. On a fully
@@ -78,17 +78,17 @@ proposed parallel-safe groups — a proposal, not a decision:
 own viability gate before any of it runs.
 
 Prompt body: [references/agents/priority-research.md](agents/priority-research.md). Fill
-its `{brace}` placeholders from the current repo and run count, then spawn a `sonnet`
-sub-agent with it.
+its `{brace}` placeholders from the current repo and run count, then spawn it with
+`subagent_type: executor`.
 
 ## Implementation (step 3)
 
-Spawn one sub-agent per issue. **`sonnet` is the default; `opus` when the issue is
-foundational** — architecture or a skeleton, an interface/port/schema, or a skill,
+Spawn one sub-agent per issue. **`executor` is the default; `architect` when the issue
+is foundational** — architecture or a skeleton, an interface/port/schema, or a skill,
 instruction file, or gate whose shape the rest of the backlog copies. The test is blast
 radius, not difficulty:
-[cost-discipline.md#the-foundation-exception-opus-for-what-the-backlog-builds-on](cost-discipline.md#the-foundation-exception-opus-for-what-the-backlog-builds-on).
-A resume/patch run stays on the model its first run used. In parallel mode issue every
+[cost-discipline.md#the-foundation-exception-architect-for-what-the-backlog-builds-on](cost-discipline.md#the-foundation-exception-architect-for-what-the-backlog-builds-on).
+A resume/patch run stays on the tier its first run used. In parallel mode issue every
 prompt in the batch **in one message** — spawned one after another they run one after
 another, which is the whole thing this mode exists to avoid.
 
@@ -101,7 +101,7 @@ step 4. `/code-review --fix` writes to the session's own working tree, which in 
 mode is the main checkout sitting on the default branch — the wrong tree — so the review
 runs read-only and the writing is delegated here instead. See
 [SKILL.md step 4](../SKILL.md#4-review-the-branch). Zero accepted findings → no spawn.
-Spawn one **`sonnet`** sub-agent per branch that has any.
+Spawn one **`executor`** sub-agent per branch that has any.
 
 Prompt body: [references/agents/review-fix.md](agents/review-fix.md).
 
@@ -109,7 +109,7 @@ Prompt body: [references/agents/review-fix.md](agents/review-fix.md).
 
 Only when this session's host will not let it launch `/code-review` directly — see
 [SKILL.md step 4](../SKILL.md#4-review-the-branch). Spawn one independent, **read-only**
-`opus` sub-agent against the branch.
+`architect` sub-agent against the branch.
 
 Prompt body: [references/agents/review-fallback.md](agents/review-fallback.md).
 
@@ -118,16 +118,17 @@ Prompt body: [references/agents/review-fallback.md](agents/review-fallback.md).
 Only after `ci_watch.sh` returns `FAIL`. Write the failing log to a file **outside** the
 working directory first (`<runstate>/ci/<pr>.log`) — a stray untracked file inside it
 makes cleanup skip the directory as dirty, and a commit convention that stages
-everything would land the log in the change. Spawn a **`sonnet`** sub-agent (escalate to
-**`opus`** once the same failure has survived two attempts in a row), one PR at a time.
+everything would land the log in the change. Spawn an **`executor`** sub-agent (escalate
+to **`architect`** once the same failure has survived two attempts in a row), one PR at
+a time.
 
 Prompt body: [references/agents/ci-repair.md](agents/ci-repair.md).
 
 ## Design decision (step 8b)
 
 Spawned at [SKILL.md step 8b](../SKILL.md#8b-unblock-held-designs-in-the-background),
-one **`opus`** sub-agent per design-blocked issue, **in the background** — this session
-spawns a round in one message and goes straight back to shipping.
+one **`architect`** sub-agent per design-blocked issue, **in the background** — this
+session spawns a round in one message and goes straight back to shipping.
 
 This is the only sub-agent in this skill that writes to GitHub, and only two writes: one
 comment on the issue and one label clear. It writes nothing in the checkout, so

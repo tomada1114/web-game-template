@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import consoleModule from "node:console";
 import process from "node:process";
 
 import { format, getFileInfo, resolveConfig } from "prettier";
@@ -22,11 +23,10 @@ import {
   bootstrap,
   escapeHtml,
   findPlaceholders,
+  main,
   normalizeRelativePath,
   parseArguments,
   promptArguments,
-  removeSelfReferentialLines,
-  repadMarkdownTable,
   validatePackageName,
   validateTitle,
 } from "../scripts/bootstrap.mjs";
@@ -101,14 +101,14 @@ function allFiles(root: string): string[] {
   return files;
 }
 
-// Generalizes #103's single-file AGENTS.md byte-identity assertion: every
+// Generalizes #103's single-file instruction-file byte-identity assertion: every
 // text file Prettier would touch in a real, generated repository must
 // already be in the shape `prettier --check .` expects, or a forker's first
 // `pnpm check:quick` fails on a file they never edited (see #111). Honors
 // the generated tree's own `.gitignore`/`.prettierignore` and Prettier's
 // parser inference exactly the way the `prettier` CLI does, so build output,
-// the generated `.claude/skills/` mirror, and binary fixtures are skipped
-// the same way `pnpm format:check` skips them.
+// generated sub-agent definitions, and binary fixtures are skipped the same
+// way `pnpm format:check` skips them.
 async function assertGeneratedTreeIsFormatted(root: string): Promise<void> {
   const ignorePath = [".gitignore", ".prettierignore"]
     .map((name) => path.join(root, name))
@@ -134,12 +134,7 @@ async function assertGeneratedTreeIsFormatted(root: string): Promise<void> {
 }
 
 function aiLayerFiles(root: string): string[] {
-  return [
-    "AGENTS.md",
-    "CLAUDE.md",
-    ...relativeFiles(root, ".claude"),
-    ...relativeFiles(root, ".agents"),
-  ];
+  return ["CLAUDE.md", ...relativeFiles(root, ".claude")];
 }
 
 function options(
@@ -239,33 +234,6 @@ describe("bootstrap validation", () => {
   it("normalizes Windows separators without accepting traversal", () => {
     expect(normalizeRelativePath(".\\docs\\reference.md")).toBe("docs/reference.md");
     expect(() => validatePackageName("..\\evil")).toThrow(BootstrapError);
-  });
-
-  it("re-pads a table after its widest row is removed", () => {
-    expect(
-      removeSelfReferentialLines(
-        [
-          "| Skill                        | Load it when |",
-          "| ---------------------------- | ------------ |",
-          "| `writing-tests`              | a test       |",
-          "| `bootstrapping-the-template` | the flow     |",
-          "",
-        ].join("\n"),
-      ),
-    ).toBe(
-      [
-        "| Skill           | Load it when |",
-        "| --------------- | ------------ |",
-        "| `writing-tests` | a test       |",
-        "",
-      ].join("\n"),
-    );
-  });
-
-  it("keeps a delimiter row's alignment markers when re-padding", () => {
-    expect(repadMarkdownTable(["| a | bbbb |", "| :-: | ---: |", "| c | d |"])).toEqual(
-      ["|  a  | bbbb |", "| :-: | ---: |", "|  c  |    d |"],
-    );
   });
 
   it("uses the default description when it is omitted", () => {
@@ -442,11 +410,11 @@ describe("bootstrap generation", () => {
     const stableAiFiles = aiLayerFiles(root)
       .filter(
         (file) =>
-          (file.startsWith(".claude/skills/") || file.startsWith(".agents/skills/")) &&
-          // bootstrapping-the-template documents the bootstrap flow itself, so
-          // it self-removes along with scripts/bootstrap.mjs (see
+          (file.startsWith(".claude/skills/") || file.startsWith(".claude/rules/")) &&
+          // The bootstrap rule documents the bootstrap flow itself, so it
+          // self-removes along with scripts/bootstrap.mjs (see
           // SELF_REMOVED_PATHS) rather than staying stable across a run.
-          !file.includes("/skills/bootstrapping-the-template/"),
+          file !== ".claude/rules/bootstrap.md",
       )
       .map((file) => [file, readFileSync(path.join(root, file), "utf8")] as const);
     const coreConfigBefore = readFileSync(
@@ -488,20 +456,14 @@ describe("bootstrap generation", () => {
     // Bootstrap's own script has nothing left to do in a generated repository
     // and is never referenced again, so it removes itself.
     expect(existsSync(path.join(root, "scripts", "bootstrap.mjs"))).toBe(false);
-    // The skill documenting the bootstrap flow has nothing left to document
+    // The rule documenting the bootstrap flow has nothing left to document
     // once that flow's own files are gone, so it self-removes too.
-    expect(
-      existsSync(path.join(root, ".agents", "skills", "bootstrapping-the-template")),
-    ).toBe(false);
-    expect(
-      existsSync(path.join(root, ".claude", "skills", "bootstrapping-the-template")),
-    ).toBe(false);
-    // AGENTS.md's own routing row and Quick reference line must go with the
-    // skill and script they name, or a forker's first `pnpm check` sees a
-    // Skills table row pointing at a directory that no longer exists.
-    const generatedAgentsMd = readFileSync(path.join(root, "AGENTS.md"), "utf8");
-    expect(generatedAgentsMd).not.toContain("bootstrapping-the-template");
-    expect(generatedAgentsMd).not.toContain("bootstrap:e2e");
+    expect(existsSync(path.join(root, ".claude", "rules", "bootstrap.md"))).toBe(false);
+    // CLAUDE.md's template-only block names the bootstrap commands and rule;
+    // it must go with them, or the generated memory file points at nothing.
+    const generatedClaudeMd = readFileSync(path.join(root, "CLAUDE.md"), "utf8");
+    expect(generatedClaudeMd).not.toContain("bootstrap:e2e");
+    expect(generatedClaudeMd).not.toContain(".claude/rules/bootstrap.md");
     expect(readFileSync(path.join(root, "CONTRIBUTING.md"), "utf8")).not.toContain(
       "bootstrap:check",
     );
@@ -513,20 +475,15 @@ describe("bootstrap generation", () => {
     for (const [file, contents] of stableAiFiles) {
       expect(readFileSync(path.join(root, file), "utf8")).toBe(contents);
     }
-    // Both copies are real files in a generated repository: Claude Code reads
-    // only `.claude/skills/`, Codex CLI only `.agents/skills/`, and a clone on
-    // any platform has to get both without a link to resolve.
-    const skillCopies = [".agents", ".claude"].map((directory) =>
-      path.join(root, directory, "skills", "merge-dependabot", "SKILL.md"),
+    const dependabotSkillPath = path.join(
+      root,
+      ".claude",
+      "skills",
+      "merge-dependabot",
+      "SKILL.md",
     );
-    for (const copy of skillCopies) {
-      expect(existsSync(copy)).toBe(true);
-    }
-    const [agentsSkill, claudeSkill] = skillCopies.map((copy) =>
-      readFileSync(copy, "utf8"),
-    );
-    expect(claudeSkill).toBe(agentsSkill);
-    const dependabotSkill = claudeSkill ?? "";
+    expect(existsSync(dependabotSkillPath)).toBe(true);
+    const dependabotSkill = readFileSync(dependabotSkillPath, "utf8");
     expect(dependabotSkill).toContain(".github/PULL_REQUEST_TEMPLATE.md");
     expect(existsSync(path.join(root, ".github", "PULL_REQUEST_TEMPLATE.md"))).toBe(
       true,
@@ -641,12 +598,12 @@ describe("bootstrap generation", () => {
 
   it("validates projected dry-run output without mutating the source", () => {
     const root = copyTemplate();
-    const agents = path.join(root, "AGENTS.md");
+    const claudeMd = path.join(root, "CLAUDE.md");
     writeFileSync(
-      agents,
-      `${readFileSync(agents, "utf8")}\nThis reference must be rejected: <!-- template-only:start -->\n`,
+      claudeMd,
+      `${readFileSync(claudeMd, "utf8")}\nThis reference must be rejected: <!-- template-only:start -->\n`,
     );
-    const before = readFileSync(agents, "utf8");
+    const before = readFileSync(claudeMd, "utf8");
 
     expect(() =>
       bootstrap(root, {
@@ -654,19 +611,19 @@ describe("bootstrap generation", () => {
         dryRun: true,
       }),
     ).toThrow(/ERR_AI_LAYER_REFERENCE/);
-    expect(readFileSync(agents, "utf8")).toBe(before);
+    expect(readFileSync(claudeMd, "utf8")).toBe(before);
   });
 
   it("rejects a Markdown reference to a path the generated tree does not contain", () => {
     const root = copyTemplate();
-    const agents = path.join(root, "AGENTS.md");
+    const claudeMd = path.join(root, "CLAUDE.md");
     writeFileSync(
-      agents,
-      `${readFileSync(agents, "utf8")}\nSee \`scripts/does-not-exist.mjs\` for details.\n`,
+      claudeMd,
+      `${readFileSync(claudeMd, "utf8")}\nSee \`scripts/does-not-exist.mjs\` for details.\n`,
     );
 
     expect(() => bootstrap(root, options("dangling-reference"))).toThrow(
-      /AGENTS\.md: dangling reference `scripts\/does-not-exist\.mjs`/,
+      /CLAUDE\.md: dangling reference `scripts\/does-not-exist\.mjs`/,
     );
   });
 
@@ -676,10 +633,10 @@ describe("bootstrap generation", () => {
     // The first segment is what separates the two: the generated root has no
     // `public-api` entry, so the token is not a path to resolve at all.
     const root = copyTemplate();
-    const agents = path.join(root, "AGENTS.md");
+    const claudeMd = path.join(root, "CLAUDE.md");
     writeFileSync(
-      agents,
-      `${readFileSync(agents, "utf8")}\nThe \`public-api/internal-stays-private\` block enforces it.\n`,
+      claudeMd,
+      `${readFileSync(claudeMd, "utf8")}\nThe \`public-api/internal-stays-private\` block enforces it.\n`,
     );
 
     expect(() => bootstrap(root, options("eslint-block-name"))).not.toThrow();
@@ -690,14 +647,14 @@ describe("bootstrap generation", () => {
     // removed file sits inside a directory that survives the removal, so its
     // first segment still resolves and the dry-run preview still reports it.
     const root = copyTemplate();
-    const agents = path.join(root, "AGENTS.md");
+    const claudeMd = path.join(root, "CLAUDE.md");
     writeFileSync(
-      agents,
-      `${readFileSync(agents, "utf8")}\nSee \`scripts/bootstrap.mjs\` for details.\n`,
+      claudeMd,
+      `${readFileSync(claudeMd, "utf8")}\nSee \`scripts/bootstrap.mjs\` for details.\n`,
     );
 
     expect(() => bootstrap(root, options("removed-reference"))).toThrow(
-      /AGENTS\.md: dangling reference `scripts\/bootstrap\.mjs`/,
+      /CLAUDE\.md: dangling reference `scripts\/bootstrap\.mjs`/,
     );
   });
 
@@ -711,10 +668,10 @@ describe("bootstrap generation", () => {
     // must be excluded from the token set entirely, in both a built checkout
     // and a fresh `git ls-files` tree.
     const root = copyTemplate();
-    const agents = path.join(root, "AGENTS.md");
+    const claudeMd = path.join(root, "CLAUDE.md");
     writeFileSync(
-      agents,
-      `${readFileSync(agents, "utf8")}\nSee \`github.com/owner/repo/blob/main/README.md\` for details.\n`,
+      claudeMd,
+      `${readFileSync(claudeMd, "utf8")}\nSee \`github.com/owner/repo/blob/main/README.md\` for details.\n`,
     );
 
     expect(() => bootstrap(root, options("schemeless-url"))).not.toThrow();
@@ -726,10 +683,10 @@ describe("bootstrap generation", () => {
     // the last segment) is excluded by the same rule as the extensioned
     // case above — no separate carve-out needed.
     const root = copyTemplate();
-    const agents = path.join(root, "AGENTS.md");
+    const claudeMd = path.join(root, "CLAUDE.md");
     writeFileSync(
-      agents,
-      `${readFileSync(agents, "utf8")}\nSee \`example.com/path\` for details.\n`,
+      claudeMd,
+      `${readFileSync(claudeMd, "utf8")}\nSee \`example.com/path\` for details.\n`,
     );
 
     expect(() => bootstrap(root, options("bare-hostname"))).not.toThrow();
@@ -742,10 +699,10 @@ describe("bootstrap generation", () => {
     // the token set outright. This pins the distinction between "excluded"
     // (never becomes a token) and "exempt" (becomes a token, then allowed).
     const root = copyTemplate();
-    const agents = path.join(root, "AGENTS.md");
+    const claudeMd = path.join(root, "CLAUDE.md");
     writeFileSync(
-      agents,
-      `${readFileSync(agents, "utf8")}\nSee \`.claude/settings.local.json\` for details.\n`,
+      claudeMd,
+      `${readFileSync(claudeMd, "utf8")}\nSee \`.claude/settings.local.json\` for details.\n`,
     );
 
     expect(() => bootstrap(root, options("dotfile-exempt"))).not.toThrow();
@@ -759,14 +716,14 @@ describe("bootstrap generation", () => {
     // before the dangling-reference check ever runs — silently hiding an
     // obviously bogus reference into a file that cannot have a subpath.
     const root = copyTemplate();
-    const agents = path.join(root, "AGENTS.md");
+    const claudeMd = path.join(root, "CLAUDE.md");
     writeFileSync(
-      agents,
-      `${readFileSync(agents, "utf8")}\nSee \`.prettierrc.json/overrides\` for details.\n`,
+      claudeMd,
+      `${readFileSync(claudeMd, "utf8")}\nSee \`.prettierrc.json/overrides\` for details.\n`,
     );
 
     expect(() => bootstrap(root, options("multi-dot-dotfile"))).toThrow(
-      /AGENTS\.md: dangling reference `\.prettierrc\.json\/overrides`/,
+      /CLAUDE\.md: dangling reference `\.prettierrc\.json\/overrides`/,
     );
   });
 
@@ -786,16 +743,16 @@ describe("bootstrap generation", () => {
       if (createDistDirectory) {
         mkdirSync(path.join(root, "dist"), { recursive: true });
       }
-      const agents = path.join(root, "AGENTS.md");
+      const claudeMd = path.join(root, "CLAUDE.md");
       writeFileSync(
-        agents,
-        `${readFileSync(agents, "utf8")}\nSee \`dist/getting-started.md\` for details.\n`,
+        claudeMd,
+        `${readFileSync(claudeMd, "utf8")}\nSee \`dist/getting-started.md\` for details.\n`,
       );
 
       expect(() =>
         bootstrap(root, options(`dist-dangling-${String(createDistDirectory)}`)),
       ).toThrow(
-        /ERR_AI_LAYER_REFERENCE[\s\S]*AGENTS\.md: dangling reference `dist\/getting-started\.md`/,
+        /ERR_AI_LAYER_REFERENCE[\s\S]*CLAUDE\.md: dangling reference `dist\/getting-started\.md`/,
       );
     },
   );
@@ -810,10 +767,10 @@ describe("bootstrap generation", () => {
       if (createDistDirectory) {
         mkdirSync(path.join(root, "dist"), { recursive: true });
       }
-      const agents = path.join(root, "AGENTS.md");
+      const claudeMd = path.join(root, "CLAUDE.md");
       writeFileSync(
-        agents,
-        `${readFileSync(agents, "utf8")}\n` +
+        claudeMd,
+        `${readFileSync(claudeMd, "utf8")}\n` +
           "Exempt references: `dist`, `dist/`, `docs/`, `apps/web/dist/`, " +
           "`.claude/settings.local.json`, `secrets/`.\n",
       );
@@ -830,10 +787,10 @@ describe("bootstrap generation", () => {
     // result instead of a preview, a validation failure here would delete
     // scripts/bootstrap.mjs and rename package.json with no way to recover.
     const root = copyTemplate();
-    const agents = path.join(root, "AGENTS.md");
-    const before = readFileSync(agents, "utf8");
+    const claudeMd = path.join(root, "CLAUDE.md");
+    const before = readFileSync(claudeMd, "utf8");
     writeFileSync(
-      agents,
+      claudeMd,
       `${before}\nSee \`scripts/does-not-exist.mjs\` for details.\n`,
     );
     const packageJsonBefore = readFileSync(path.join(root, "package.json"), "utf8");
@@ -899,14 +856,14 @@ describe("bootstrap generation", () => {
   it("does not let a nested, unrelated file sharing an AI-layer basename affect the AI-layer check", () => {
     // AI_LAYER_TARGETS matches exact repository-relative paths, not a
     // basename at any depth (fixed in #71). A stray bootstrap marker in a
-    // nested file that happens to share the top-level AGENTS.md's name must
+    // nested file that happens to share the top-level CLAUDE.md's name must
     // not fail bootstrap, because that nested file is never a generated
     // repository's AI-layer instructions.
     const root = copyTemplate();
     const nestedDirectory = path.join(root, "docs", "guides");
     mkdirSync(nestedDirectory, { recursive: true });
     writeFileSync(
-      path.join(nestedDirectory, "AGENTS.md"),
+      path.join(nestedDirectory, "CLAUDE.md"),
       "# Unrelated guide\n\n" +
         "<!-- template-only:start -->\n" +
         "A stale marker a basename-only match would have wrongly flagged.\n" +
@@ -1002,5 +959,100 @@ describe("bootstrap generation", () => {
     const before = readFileSync(path.join(root, "package.json"), "utf8");
     expect(() => bootstrap(root, options("twice"))).toThrow(/ERR_ALREADY_BOOTSTRAPPED/);
     expect(readFileSync(path.join(root, "package.json"), "utf8")).toBe(before);
+  });
+});
+
+describe("main", () => {
+  function captureConsole(): { out: string[]; err: string[] } {
+    const out: string[] = [];
+    const err: string[] = [];
+    vi.spyOn(consoleModule, "log").mockImplementation((line: unknown) => {
+      out.push(String(line));
+    });
+    vi.spyOn(consoleModule, "error").mockImplementation((line: unknown) => {
+      err.push(String(line));
+    });
+    return { out, err };
+  }
+
+  it.each(["--help", "-h"])("prints usage and exits 0 for %s", async (flag) => {
+    const { out } = captureConsole();
+    await expect(main([flag])).resolves.toBe(0);
+    expect(out.join("\n")).toContain("Usage");
+  });
+
+  it("exits 2 with usage on a BootstrapError", async () => {
+    const { err } = captureConsole();
+    await expect(main(["Uppercase"])).resolves.toBe(2);
+    expect(err.length).toBeGreaterThan(0);
+  });
+
+  it("exits 1 on an error that is not a BootstrapError", async () => {
+    const { err } = captureConsole();
+    const missing = path.join(tmpdir(), "bootstrap-main-missing-cwd");
+    vi.spyOn(process, "cwd").mockReturnValue(missing);
+    await expect(
+      main([
+        "acme-library",
+        "--title",
+        "Acme Game",
+        "--author",
+        "Ada Lovelace",
+        "--github-user",
+        "ada",
+        "--license",
+        "MIT",
+      ]),
+    ).resolves.toBe(1);
+    expect(err.length).toBeGreaterThan(0);
+  });
+
+  it("reports a dry run without changing files", async () => {
+    const root = copyTemplate();
+    const before = readFileSync(path.join(root, "package.json"), "utf8");
+    vi.spyOn(process, "cwd").mockReturnValue(root);
+    const { out } = captureConsole();
+    await expect(
+      main([
+        "dry-library",
+        "--title",
+        "Acme Game",
+        "--author",
+        "Ada Lovelace",
+        "--github-user",
+        "ada",
+        "--license",
+        "MIT",
+        "--dry-run",
+      ]),
+    ).resolves.toBe(0);
+    expect(out[0]).toMatch(/^Dry run: \d+ path\(s\) would change\.$/u);
+    expect(out.some((line) => line.startsWith("- "))).toBe(true);
+    expect(out.at(-1)).toBe("No repository files were changed.");
+    expect(readFileSync(path.join(root, "package.json"), "utf8")).toBe(before);
+  });
+
+  it("reports a real run and the next command", async () => {
+    const root = copyTemplate();
+    vi.spyOn(process, "cwd").mockReturnValue(root);
+    const { out } = captureConsole();
+    await expect(
+      main([
+        "real-library",
+        "--title",
+        "Acme Game",
+        "--author",
+        "Ada Lovelace",
+        "--github-user",
+        "ada",
+        "--license",
+        "MIT",
+      ]),
+    ).resolves.toBe(0);
+    expect(out[0]).toBe("Bootstrapped real-library.");
+    expect(out.at(-1)).toBe(
+      "Next: run `pnpm install --frozen-lockfile`, then `pnpm check`.",
+    );
+    expect(existsSync(path.join(root, "scripts", "bootstrap.mjs"))).toBe(false);
   });
 });

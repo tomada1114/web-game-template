@@ -69,14 +69,14 @@ checkout and leave it dirty — the exact state
 
 The review itself reads `<base>...<branch>` from the shared object store and is safe
 from anywhere; only the writing half is not. So in parallel mode: review each branch
-without `--fix`, triage the whole batch, then spawn one `sonnet` fix run per branch with
-accepted findings, scoped to that branch's worktree, using
+without `--fix`, triage the whole batch, then spawn one `executor` fix run per branch
+with accepted findings, scoped to that branch's worktree, using
 [agents/review-fix.md](agents/review-fix.md).
 
 ## `/code-review` cannot be launched
 
-Host won't let this session run the slash command, or Codex CLI → one independent,
-**read-only** `opus` sub-agent against the branch, using
+Host won't let this session run the slash command → one independent, **read-only**
+`architect` sub-agent against the branch, using
 [agents/review-fallback.md](agents/review-fallback.md), triaged the same way. Never
 re-read your own diff and call that a review.
 
@@ -89,10 +89,11 @@ branch's CI runs before starting `ci_watch.sh`.
 
 ## CI fails
 
-Fill and spawn a **`sonnet`** sub-agent — `opus` once the same failure has survived two
-attempts in a row — with [agents/ci-repair.md](agents/ci-repair.md), its work directory
-set to whichever checkout holds the branch: the main checkout in serial mode, that
-issue's worktree in parallel mode. Up to **3 attempts**. `PUSHED: no` ends the loop.
+Fill and spawn an **`executor`** sub-agent — `architect` once the same failure has
+survived two attempts in a row — with [agents/ci-repair.md](agents/ci-repair.md), its
+work directory set to whichever checkout holds the branch: the main checkout in serial
+mode, that issue's worktree in parallel mode. Up to **3 attempts**. `PUSHED: no` ends
+the loop.
 
 A test deleted, skipped, or weakened to pass, or a "flaky" re-run without a diagnosis,
 is a **failed outcome**, not a green one.

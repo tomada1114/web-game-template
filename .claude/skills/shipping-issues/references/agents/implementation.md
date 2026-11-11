@@ -1,11 +1,11 @@
 # Implementation (sub-agent prompt)
 
 Spawned at [SKILL.md step 3](../../SKILL.md#3-implement), one issue at a time.
-**`sonnet` is the default; `opus` when the issue is foundational** — architecture or a
-skeleton, an interface/port/schema, or a skill, instruction file, or gate whose shape
-the rest of the backlog copies. The test is blast radius, not difficulty:
-[cost-discipline.md#the-foundation-exception-opus-for-what-the-backlog-builds-on](../cost-discipline.md#the-foundation-exception-opus-for-what-the-backlog-builds-on).
-A resume/patch run stays on the model its first run used.
+**`executor` is the default; `architect` when the issue is foundational** — architecture
+or a skeleton, an interface/port/schema, or a skill, instruction file, or gate whose
+shape the rest of the backlog copies. The test is blast radius, not difficulty:
+[cost-discipline.md#the-foundation-exception-architect-for-what-the-backlog-builds-on](../cost-discipline.md#the-foundation-exception-architect-for-what-the-backlog-builds-on).
+A resume/patch run stays on the tier its first run used.
 
 ```
 Implement GitHub issue #{n} in {owner}/{repo}. Once you return, your branch is
@@ -47,8 +47,7 @@ Branch: {branch_name}             <- already created and checked out; do not
 Likely files: {paths from step 2's triage, or — when step 2 was skipped on a
                labeled backlog — a short grep/glob the parent runs against
                the issue's own keywords right before spawning; never blank}
-Project conventions: read {workdir}/CLAUDE.md and
-{workdir}/AGENTS.md before writing code.
+Project conventions: read {workdir}/CLAUDE.md before writing code.
 Decisions already made: {anything step 2/2b resolved, so it is not re-opened}
 Verification command: {verify_command, from step 3's smoke run — if that
                         smoke run found none, say so explicitly here rather

@@ -14,10 +14,9 @@ description: >
 **Owns:** landing already-open Dependabot/Renovate PRs — triage, landing mode, the
 combined branch, and cleanup. **Does not own:** whether a package may be added or bumped
 at all, the release-age cooldown, and the supply-chain settings
-(`managing-dependencies`); the release line a player-visible bump owes
-(`releasing-builds`).
+(`.claude/rules/dependencies.md`).
 
-Branch names, commit messages, and PR text follow AGENTS.md's English-only convention.
+Branch names, commit messages, and PR text follow `CLAUDE.md`'s English-only convention.
 
 ## Operating Contract
 
@@ -33,7 +32,7 @@ Branch names, commit messages, and PR text follow AGENTS.md's English-only conve
 ## Step 1: Survey
 
 ```bash
-node .agents/skills/merge-dependabot/scripts/survey-prs.mjs
+node .claude/skills/merge-dependabot/scripts/survey-prs.mjs
 ```
 
 The script is read-only. It lists every open bot PR with its ecosystem, semver level,
@@ -126,7 +125,7 @@ git merge --no-ff origin/<branch> -m "deps: merge #<number> <title>"
 ```
 
 Resolve `pnpm-lock.yaml` conflicts by regenerating, never by hand
-(`managing-dependencies` owns that rule):
+(`.claude/rules/dependencies.md` owns that rule):
 
 ```bash
 pnpm install --lockfile-only
@@ -156,7 +155,7 @@ gh pr create --title "deps: batch dependency updates" \
 ```
 
 A dependency bump that players can observe (a runtime dependency that ships in the
-bundle) needs `Release: needed` (`releasing-builds`); a devDependency bump does not.
+bundle) needs `Release: needed`; a devDependency bump does not.
 
 ## Step 5: Land and clean up
 
@@ -186,11 +185,11 @@ as done.
 
 - **One approval gate only** — after Step 3's plan is approved, run to completion.
 - **Never** merge on `PENDING` checks; re-confirm green after every rebase.
-- **Never** hand-edit `pnpm-lock.yaml` (`managing-dependencies` owns this rule); run
-  `pnpm install --lockfile-only` instead.
+- **Never** hand-edit `pnpm-lock.yaml` (`.claude/rules/dependencies.md` owns this rule);
+  run `pnpm install --lockfile-only` instead.
 - **Never** close an original PR before its replacement is merged.
 - **Never** unpin a SHA-pinned GitHub Action to make a bump apply cleanly.
 - **Never** use `--admin`, `--no-verify`, or force-push, and never weaken a gate to land
-  a bump — AGENTS.md's "Security and human approval" applies here unchanged.
+  a bump — `CLAUDE.md`'s "Security and human approval" applies here unchanged.
 - **Stay in scope** — this skill lands dependency bumps. Unrelated cleanups you notice
   go in the report as suggestions, not in the branch.

@@ -18,7 +18,6 @@ const automationTests = [
   "tests/labels.test.ts",
   "tests/node-tools.test.ts",
   "tests/skills-frontmatter.test.ts",
-  "tests/sync-agents.test.ts",
   "tests/sync-labels.test.ts",
   "tests/template-self.test.ts",
   "tests/tooling-ignores.test.ts",
@@ -32,7 +31,7 @@ export default defineConfig({
     // Cleanup is the runner's job, not each test's. A spy, a stubbed env var or
     // a stubbed global that outlives the test that created it turns a later
     // failure into a mystery whose cause is in a different file, and makes the
-    // "each test passes when run alone" rule in AGENTS.md unenforceable.
+    // "each test passes when run alone" rule in .claude/rules/tests.md unenforceable.
     restoreMocks: true,
     clearMocks: true,
     unstubEnvs: true,
@@ -138,8 +137,8 @@ export default defineConfig({
         },
         // Raised again by issue #98, which added dedicated coverage for
         // verify-bootstrap.mjs's main()/run()/assertGenerated(),
-        // verify-package.mjs's main()/runCheck(), sync-agents.mjs's
-        // main()/listFiles()/assertSourceDirectory(), and smoke-package.mjs's
+        // verify-package.mjs's main()/runCheck(), the since-removed
+        // sync-agents.mjs's main()/listFiles()/assertSourceDirectory(), and smoke-package.mjs's
         // main()/installConsumer()/publicSubpaths() — the functions issue #88
         // deliberately left out of its own, smaller raise. Measured baseline
         // at the time of this raise: 88.52% statements, 80.05% branches,

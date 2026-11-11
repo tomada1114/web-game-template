@@ -274,8 +274,8 @@ describe("main", () => {
   const tempDirs: string[] = [];
 
   beforeEach(() => {
-    // scripts/sync-labels.mjs imports `console` from "node:console" (AGENTS.md's
-    // "Repository automation" convention), which is a distinct object from the
+    // scripts/sync-labels.mjs imports `console` from "node:console" (a
+    // `.claude/rules/scripts.md` convention), which is a distinct object from the
     // ambient global under Vitest, so the spy has to target the same module.
     errorSpy = vi.spyOn(consoleModule, "error").mockImplementation(() => undefined);
     logSpy = vi.spyOn(consoleModule, "log").mockImplementation(() => undefined);

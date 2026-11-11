@@ -1,5 +1,5 @@
 # `packages/*` holds the deterministic rules (`packages/core`), `apps/*` the
-# renderers that consume them (`apps/web`); see "Architecture" in AGENTS.md.
+# renderers that consume them (`apps/web`); see "Architecture" in CLAUDE.md.
 packages:
   - "packages/*"
   - "apps/*"

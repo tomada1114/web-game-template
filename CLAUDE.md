@@ -1,33 +1,107 @@
-<!-- agents-md-sync:begin -->
+# Project Guide
 
-@AGENTS.md
-<!-- agents-md-sync:end -->
+A template for a TypeScript browser game, worked on with Claude Code. Nothing here is
+published to npm: to publish means pushing a release tag or uploading a build to a game
+portal. Development and CI run on Node >= 24 with pnpm 11 through Corepack; never relax
+`devEngines.runtime`'s `onFail: error`. It is a pnpm workspace: `packages/core` holds
+the game rules, and `apps/web` builds them into a static site with Vite 8.
 
-# Claude Code Specifics
+The game side beyond that skeleton (seeded rules, scenes, portal adapter, release flow)
+is not built yet; its design decisions are the drafts under `docs/design/skill-drafts/`,
+with requirements in `docs/product/requirements.md`. Read the matching draft before
+implementing that part.
 
-The shared, tool-agnostic instructions are in `AGENTS.md`, imported above. This file
-only records what Claude Code adds on top of them.
+This file holds what has to be true before the task is known. Conventions for a kind of
+file live in `.claude/rules/` and load when such a file is read; procedures live in
+`.claude/skills/`. Machine-enforceable rules live in the configs, and running the gate
+is how you learn them.
 
-- There are no Claude Code hooks in this repository. Formatting, linting, type-checking,
-  related tests, and the staged-content checks all run from `lefthook`'s pre-commit hook
-  instead, where they apply to every author — human, Claude Code, Codex, or any other
-  tool — not only a Claude Code session. See AGENTS.md's "Enforcement layers" for the
-  full design and why it moved there.
-- Skills are authored under `.agents/skills/` — the path Codex CLI reads — and mirrored
-  into `.claude/skills/`, the only path Claude Code reads. Claude Code is therefore the
-  tool that sees the generated copy rather than the authored one: never hand-edit it,
-  and never edit only one side. The mirror is produced by `pnpm agents:sync` and
-  committed; drift fails `pnpm agents:check`, `tests/sync-agents.test.ts`, and
-  lefthook's pre-commit hook. The `authoring-skills` skill holds the rest, including why
-  both copies are real files rather than a symlink.
-- This repository ships no `.claude/settings.json`, so no Claude Code permission entry
-  is committed here or carried into a generated project — AGENTS.md's "Security and
-  human approval" and "Enforcement layers" hold the rules that would otherwise live
-  there as instructions instead. A personal permission allowlist (model choice, extra
-  permissions, a deny list you configure for yourself) belongs in your own
-  `~/.claude/settings.json` or the gitignored `.claude/settings.local.json`, never
-  committed to this repository.
+## Commands
 
-When an instruction in AGENTS.md would block something that looks necessary, the answer
-is to fix what made the bypass look necessary, or to ask. It is not to find another
-spelling.
+```sh
+pnpm check:quick   # format check, lint, typecheck, tests — the everyday gate
+pnpm check         # the full gate: the checks above with coverage, then the build
+pnpm fix           # ESLint autofix, then Prettier
+pnpm test:coverage # tests with the coverage thresholds enforced
+pnpm typecheck     # tsc -b over every workspace program
+pnpm build         # build apps/web into apps/web/dist
+pnpm dev           # Vite's dev server for apps/web; runs until stopped
+pnpm repo:labels   # create/update GitHub labels from .github/labels.yml
+```
+
+<!-- template-only:start -->
+
+```sh
+pnpm bootstrap:e2e   # run the bootstrap end to end on a copy
+pnpm bootstrap:check # the same, then install and run the full gate in the generated repository
+```
+
+This checkout is the template itself. The bootstrap flow removes itself, this block, and
+`.claude/rules/bootstrap.md` from a generated repository.
+
+<!-- template-only:end -->
+
+Run the narrowest check that can fail, then the gate: one Vitest project with
+`pnpm exec vitest run --project core` (or `web`, `unit`, `automation`) or one file with
+`pnpm exec vitest run <path>`; `pnpm typecheck` then `pnpm build` for the web entry or
+`apps/web/index.html`; `pnpm install` then `pnpm check` after a `package.json` or
+`pnpm-workspace.yaml`; `pnpm fix` after Markdown. There are no per-package test scripts.
+CI and the pre-commit hook call these same scripts and define no check of their own.
+
+## Architecture
+
+```
+packages/core/
+├── src/index.ts   # the only module apps/web imports
+└── test/          # core's unit tests
+apps/web/
+├── index.html     # the page Vite builds into apps/web/dist
+├── src/main.ts    # the browser entry
+├── vite.config.ts # base "./": every built asset URL is relative
+└── test/          # unit tests of pure helpers
+scripts/           # repository automation (.mjs), never shipped
+tests/             # repository-level tests
+```
+
+- `packages/core` holds the deterministic rules and imports nothing: no dependencies, no
+  DOM, no Node. It never imports from `apps/*`.
+- `apps/web` depends on core by its workspace name and reaches it only through
+  `packages/core/src/index.ts`.
+- Anything that reads time, randomness, the device, or the network lives in `apps/web`
+  and enters core as a plain value.
+
+## Security and human approval
+
+- **Commit, push, pull request, and publish always need a human.** Nothing in this
+  repository blocks `--no-verify`, `LEFTHOOK=0`, a force-push, a release tag, or a
+  portal upload mechanically; this instruction is the rule. Reaching for a bypass is
+  what is ruled out, not one spelling of it.
+- Never read or write `.env*` (the `.example`, `.sample` and `.template` variants are
+  fine) or anything under `secrets/`, and never write a credential into a tracked file.
+  The pre-commit hook inspects only what is staged, so a shell read is not caught.
+- Every pull request states `Release: none` or `Release: needed — <reason>`, from
+  `.github/PULL_REQUEST_TEMPLATE.md`.
+- `pnpm-lock.yaml` is generated by `pnpm install`, never hand-edited. Before adding,
+  bumping, or removing a package, read `.claude/rules/dependencies.md`.
+- **Never weaken a gate to make a run pass**: no lowered coverage threshold, no file
+  added to `coverage.exclude` to move a number, no deleted security workflow, no removed
+  `--frozen-lockfile`, no removed or relaxed ESLint rule or `pnpm-workspace.yaml`
+  supply-chain setting, no `@ts-ignore`, no blanket `eslint-disable`, no skipped or
+  deleted test. If a gate is wrong, say so and let a human decide. This rule lives here
+  because the agent it must reach has classified its task as "make CI green" and loads
+  nothing else.
+
+## Conventions
+
+- All committed code, comments, configuration, and documentation are in English.
+- A comment carries only what the code cannot: a non-obvious why, a trap the next edit
+  would spring, an external constraint. Default to none. TSDoc on the public surface is
+  a contract and stays.
+- Do what was asked; nothing more. Prefer editing an existing file to creating one. Note
+  improvements outside the current scope instead of making them.
+- Documentation impact is decided by what a user can observe (a signature, a default, a
+  runtime behavior, an error `code`, a setup step), not by which directory changed. When
+  something observable moved, the `README.md` example and the affected `docs/` page
+  change in the same pull request; otherwise say that no documentation change is needed.
+- Sub-agent tiers are named by role (`executor`, `architect`, `scout`, `worker`; defined
+  in `.claude/agents/`), never by model name or effort.

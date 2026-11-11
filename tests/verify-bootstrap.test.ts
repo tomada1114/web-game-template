@@ -20,7 +20,6 @@ import {
   assertCopyable,
   assertGenerated,
   copyTemplate,
-  listRoutingTableSkillNames,
   main,
   run,
 } from "../scripts/verify-bootstrap.mjs";
@@ -171,28 +170,6 @@ describe("run", () => {
   });
 });
 
-describe("listRoutingTableSkillNames", () => {
-  it("reads every backticked name in the first column under the Skills heading", () => {
-    const source =
-      "## Skills\n\n" +
-      "| Skill | Load it when you are working on |\n" +
-      "| --- | --- |\n" +
-      "| `writing-typescript` | a module under `src/**/*.ts` |\n" +
-      "| `writing-tests` | the body of a test under `tests/` |\n" +
-      "\n## Security\n\n" +
-      "| `not-a-skill` | this row is outside the Skills section |\n";
-
-    expect(listRoutingTableSkillNames(source)).toEqual([
-      "writing-typescript",
-      "writing-tests",
-    ]);
-  });
-
-  it("returns an empty list when the file has no Skills heading", () => {
-    expect(listRoutingTableSkillNames("# AGENTS.md\n")).toEqual([]);
-  });
-});
-
 describe("assertGenerated", () => {
   const TITLE = "Acme & Co";
 
@@ -224,7 +201,7 @@ describe("assertGenerated", () => {
       writeFileSync(target, contents);
     }
     for (const relative of [
-      "AGENTS.md",
+      "CLAUDE.md",
       "README.md",
       "CONTRIBUTING.md",
       ".github/workflows/ci.yml",
@@ -305,38 +282,17 @@ describe("assertGenerated", () => {
     );
   });
 
-  it("passes when every routed skill in AGENTS.md's Skills table has a directory", () => {
+  it("throws ERR_BOOTSTRAP_RULE_REMAINING when .claude/rules/bootstrap.md remains", () => {
     const destination = makeDestination();
     writeValidFixture(destination, "acme-game");
+    mkdirSync(path.join(destination, ".claude", "rules"), { recursive: true });
     writeFileSync(
-      path.join(destination, "AGENTS.md"),
-      "## Skills\n\n" +
-        "| Skill | Load it when you are working on |\n" +
-        "| --- | --- |\n" +
-        "| `writing-typescript` | a module under `src/**/*.ts` |\n",
-    );
-    mkdirSync(path.join(destination, ".agents", "skills", "writing-typescript"), {
-      recursive: true,
-    });
-
-    expect(() => assertGenerated(destination, "acme-game", TITLE)).not.toThrow();
-  });
-
-  it("throws ERR_BOOTSTRAP_STALE_SKILL_ROUTE when a routed skill has no directory", () => {
-    const destination = makeDestination();
-    writeValidFixture(destination, "acme-game");
-    // Same shape as an unremoved SELF_REMOVED_PATHS entry would leave behind:
-    // a row naming a skill whose directory bootstrap already removed.
-    writeFileSync(
-      path.join(destination, "AGENTS.md"),
-      "## Skills\n\n" +
-        "| Skill | Load it when you are working on |\n" +
-        "| --- | --- |\n" +
-        "| `bootstrapping-the-template` | the bootstrap flow |\n",
+      path.join(destination, ".claude", "rules", "bootstrap.md"),
+      "# Bootstrap\n",
     );
 
     expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
-      /ERR_BOOTSTRAP_STALE_SKILL_ROUTE/,
+      /ERR_BOOTSTRAP_RULE_REMAINING/,
     );
   });
 
