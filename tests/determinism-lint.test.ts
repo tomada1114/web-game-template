@@ -17,9 +17,9 @@ const DETERMINISM_RULES = new Set([
 
 // The rule id each line of forbidden.ts must produce, in line order.
 const EXPECTED_RULES = [
-  ...Array<string>(9).fill("no-restricted-globals"),
+  ...Array<string>(16).fill("no-restricted-globals"),
   ...Array<string>(23).fill("no-restricted-properties"),
-  ...Array<string>(3).fill("no-restricted-syntax"),
+  ...Array<string>(17).fill("no-restricted-syntax"),
 ];
 
 // The repository's own eslint.config.mjs is loaded from `cwd`. A path given to
@@ -35,6 +35,7 @@ async function determinismMessages(
   code: string,
   filePath: string,
 ): Promise<Linter.LintMessage[]> {
+  expect(await eslint.isPathIgnored(filePath)).toBe(false);
   const [result] = await eslint.lintText(code, { filePath });
   if (result === undefined) throw new Error(`no lint result for ${filePath}`);
   const fatal = result.messages.filter((message) => message.fatal === true);

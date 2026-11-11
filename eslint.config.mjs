@@ -64,14 +64,35 @@ const NON_DETERMINISTIC_GLOBALS = [
   "crypto",
   "setTimeout",
   "setInterval",
+  "clearTimeout",
+  "clearInterval",
+  "queueMicrotask",
   "Intl",
   "globalThis",
+  "WeakRef",
+  "FinalizationRegistry",
+  "SharedArrayBuffer",
+  "Atomics",
+];
+
+/** `Math` members ECMA-262 specifies exactly; every other member is reported. */
+const ALLOWED_MATH = [
+  "floor",
+  "abs",
+  "min",
+  "max",
+  "imul",
+  "sqrt",
+  "trunc",
+  "sign",
+  "clz32",
+  "round",
 ];
 
 /**
  * `Math` members that ECMA-262 §21.3.2 lets an engine approximate, plus
- * `random`. Allowed and exactly specified: floor, abs, min, max, imul, sqrt,
- * trunc, sign, clz32, round.
+ * `random`, each reported by `no-restricted-properties` with its own entry.
+ * A member in neither list is caught by the allowlist selector instead.
  */
 const NON_DETERMINISTIC_MATH = [
   "random",
@@ -98,6 +119,11 @@ const NON_DETERMINISTIC_MATH = [
   "cbrt",
   "hypot",
 ];
+
+const KNOWN_MATH = `/^(${[...ALLOWED_MATH, ...NON_DETERMINISTIC_MATH].join("|")})$/`;
+
+/** Members that consult the locale through Intl. */
+const LOCALE_MEMBER = "/^(localeCompare$|toLocale)/";
 
 const DETERMINISM_MESSAGE =
   "packages/core must replay identically on every engine: see docs/design/skill-drafts/writing-game-core.md. Pass the value in from apps/web, or write it in integers.";
@@ -244,16 +270,32 @@ export default defineConfig([
         "error",
         NO_EXPORT_STAR,
         {
-          selector: "CallExpression[callee.property.name='localeCompare']",
-          message: `localeCompare depends on the locale; compare code units with <. ${DETERMINISM_MESSAGE}`,
+          selector: `MemberExpression[computed=false][property.name=${LOCALE_MEMBER}]`,
+          message: `localeCompare and toLocale* depend on the locale; compare code units with < and format in apps/web. ${DETERMINISM_MESSAGE}`,
+        },
+        {
+          selector: `MemberExpression[computed=true][property.value=${LOCALE_MEMBER}]`,
+          message: `localeCompare and toLocale* depend on the locale; compare code units with < and format in apps/web. ${DETERMINISM_MESSAGE}`,
+        },
+        // The two Math selectors make ALLOWED_MATH an allowlist. Members on
+        // NON_DETERMINISTIC_MATH are excluded here only because
+        // no-restricted-properties already reports them.
+        {
+          selector: `MemberExpression[object.type='Identifier'][object.name='Math']:not([computed=false][property.name=${KNOWN_MATH}]):not([computed=true][property.value=${KNOWN_MATH}])`,
+          message: `Only Math.${ALLOWED_MATH.join(", Math.")} are exactly specified. ${DETERMINISM_MESSAGE}`,
+        },
+        {
+          selector:
+            "Identifier[name='Math']:not(MemberExpression > Identifier.object):not(MemberExpression[computed=false] > Identifier.property)",
+          message: `Use Math only as \`Math.<member>\`, so the member allowlist can see each access. ${DETERMINISM_MESSAGE}`,
         },
         {
           selector: "BinaryExpression[operator='**']",
-          message: `\`**\` is Math.pow, which engines approximate. ${DETERMINISM_MESSAGE}`,
+          message: `\`**\` on numbers may be approximated by the engine, and lint cannot tell a number operand from a bigint; multiply explicitly. ${DETERMINISM_MESSAGE}`,
         },
         {
           selector: "AssignmentExpression[operator='**=']",
-          message: `\`**=\` is Math.pow, which engines approximate. ${DETERMINISM_MESSAGE}`,
+          message: `\`**=\` on numbers may be approximated by the engine, and lint cannot tell a number operand from a bigint; multiply explicitly. ${DETERMINISM_MESSAGE}`,
         },
       ],
     },
