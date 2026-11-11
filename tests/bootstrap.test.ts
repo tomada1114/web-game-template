@@ -806,27 +806,53 @@ describe("bootstrap generation", () => {
     );
   });
 
-  it.each(["file", "directory", "absent"] as const)(
-    "does not report a token under .git/ as dangling when .git is %s at the root (#20)",
-    (shape) => {
-      // In a linked worktree `.git` is a file, so its first segment exists
-      // while `.git/config` does not. Version-control internals are never a
-      // generated-tree path, whatever shape `.git` takes on disk.
-      const root = copyTemplate();
-      if (shape === "file") {
-        writeFileSync(path.join(root, ".git"), "gitdir: /elsewhere/.git/worktrees/x\n");
-      } else if (shape === "directory") {
-        mkdirSync(path.join(root, ".git"));
-      }
-      const claudeMd = path.join(root, "CLAUDE.md");
-      writeFileSync(
-        claudeMd,
-        `${readFileSync(claudeMd, "utf8")}\nEdit \`.git/config\` or \`.git/hooks/pre-commit.sample\`.\n`,
-      );
+  function appendToClaudeMd(root: string, line: string): void {
+    const claudeMd = path.join(root, "CLAUDE.md");
+    writeFileSync(claudeMd, `${readFileSync(claudeMd, "utf8")}\n${line}\n`);
+  }
 
-      expect(() => bootstrap(root, options(`git-internals-${shape}`))).not.toThrow();
+  function shapeDotGit(root: string, shape: "file" | "directory" | "absent"): void {
+    // In a linked worktree `.git` is a file, so its first segment exists
+    // while `.git/config` does not.
+    if (shape === "file") {
+      writeFileSync(path.join(root, ".git"), "gitdir: /elsewhere/.git/worktrees/x\n");
+    } else if (shape === "directory") {
+      mkdirSync(path.join(root, ".git"));
+    }
+  }
+
+  it.each(["file", "directory", "absent"] as const)(
+    "does not report `.git/config` as dangling when .git is %s at the root (#20)",
+    (shape) => {
+      const root = copyTemplate();
+      shapeDotGit(root, shape);
+      appendToClaudeMd(root, "Edit `.git/config`.");
+
+      expect(() => bootstrap(root, options(`git-config-${shape}`))).not.toThrow();
     },
   );
+
+  it("does not report `.git/config` as dangling in a dry run from a linked worktree (#20)", () => {
+    const root = copyTemplate();
+    shapeDotGit(root, "file");
+    appendToClaudeMd(root, "Edit `.git/config`.");
+
+    expect(() =>
+      bootstrap(root, { ...options("git-config-dry-run"), dryRun: true }),
+    ).not.toThrow();
+  });
+
+  it.each([
+    ["a leading ./", "./.git/config"],
+    ["a different case", ".GIT/config"],
+    ["a skipped directory with a file extension", "node_modules/vite/package.json"],
+  ])("does not report a skipped-directory token written with %s", (_label, token) => {
+    const root = copyTemplate();
+    shapeDotGit(root, "file");
+    appendToClaudeMd(root, `See \`${token}\`.`);
+
+    expect(() => bootstrap(root, options("skipped-directory-token"))).not.toThrow();
+  });
 
   it("does not scan a gitignored worktree checkout for dangling Markdown references", () => {
     // .claude/worktrees/ holds full checkouts (see .gitignore); a bootstrap

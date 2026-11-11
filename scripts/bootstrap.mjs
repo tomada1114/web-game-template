@@ -716,8 +716,12 @@ function resolveGeneratedText(root, relative, preview) {
  * path is recognized — never introduces a new top-level directory, so a
  * token it already knows is admitted outright.
  *
- * A token whose first segment is `.git` is rejected before any rule: it names
- * version-control internals, never a generated-tree path (#20).
+ * A token whose first segment (after a leading `./`, compared without regard
+ * to case, as macOS file systems do) is one of
+ * `MARKDOWN_SCAN_SKIP_DIRECTORIES` is rejected before any rule: it names
+ * version-control internals, dependencies, or scratch output, never a
+ * generated-tree path. No filesystem test can decide this, because `.git` is
+ * a file in a linked worktree (#20).
  *
  * Residual, accepted: an extensionless, non-exempt token whose first segment
  * is itself gitignored build output (`docs/some-guide`, say) still gets a
@@ -730,9 +734,8 @@ function resolveGeneratedText(root, relative, preview) {
  * @returns {boolean}
  */
 function namesGeneratedTreeEntry(root, token, preview) {
-  // Version-control internals are never part of the generated tree, and
-  // `.git` is a file in a linked worktree, so no filesystem test can decide.
-  if (token.split("/")[0] === ".git") {
+  const leadingSegment = token.replace(/^(?:\.\/)+/, "").split("/")[0] ?? "";
+  if (MARKDOWN_SCAN_SKIP_DIRECTORIES.has(leadingSegment.toLowerCase())) {
     return false;
   }
   if (preview?.has(token)) {
