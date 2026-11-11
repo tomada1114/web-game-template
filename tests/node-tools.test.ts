@@ -173,6 +173,15 @@ describe("resolveDependencyBin", () => {
     );
   });
 
+  it("resolves a workspace package's own dependency from that package", () => {
+    // vite is a dependency of apps/web, so pnpm links it under
+    // apps/web/node_modules rather than the root's.
+    const webDir = path.join(repoRoot, "apps", "web");
+    expect(resolveDependencyBin("vite", undefined, webDir)).toBe(
+      path.join(webDir, "node_modules", "vite", "bin", "vite.js"),
+    );
+  });
+
   it("throws ERR_DEPENDENCY_BIN_MISSING when the requested bin is absent", () => {
     expect(() => resolveDependencyBin("typescript", "does-not-exist")).toThrow(
       /ERR_DEPENDENCY_BIN_MISSING/,

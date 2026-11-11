@@ -11,12 +11,14 @@ const fixtures = "tests/fixtures/**";
 // guard engine's pure functions directly, so it needs no I/O budget either.
 const automationTests = [
   "tests/bootstrap.test.ts",
+  "tests/check-budget.test.ts",
   "tests/check-staged.test.ts",
   "tests/ci-sync.test.ts",
   "tests/clean.test.ts",
   "tests/git-env.test.ts",
   "tests/labels.test.ts",
   "tests/node-tools.test.ts",
+  "tests/package-crazygames.test.ts",
   "tests/skills-frontmatter.test.ts",
   "tests/sync-labels.test.ts",
   "tests/template-self.test.ts",

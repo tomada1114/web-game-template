@@ -105,11 +105,15 @@ export function npmCliPath() {
  *
  * @param {string} packageName - Name of a dependency, scope included.
  * @param {string} [binName] - Which `bin` entry to use; defaults to the only one.
+ * @param {string} [packageDir] - Directory whose `node_modules` holds the
+ * dependency; defaults to the repository root. A workspace package's own
+ * dependencies are linked under that package, not under the root.
  * @returns {string} Absolute path of the dependency's entry script.
  * @throws Error when the dependency is not installed or declares no such bin.
  */
-export function resolveDependencyBin(packageName, binName) {
-  const manifestPath = path.join(repoRoot, "node_modules", packageName, "package.json");
+export function resolveDependencyBin(packageName, binName, packageDir = repoRoot) {
+  const dependencyDir = path.join(packageDir, "node_modules", packageName);
+  const manifestPath = path.join(dependencyDir, "package.json");
   if (!existsSync(manifestPath)) {
     throw new Error(
       `ERR_DEPENDENCY_MISSING: ${packageName} is not installed.\n` +
@@ -132,5 +136,5 @@ export function resolveDependencyBin(packageName, binName) {
         "Next: check the installed version of that dependency.",
     );
   }
-  return path.join(repoRoot, "node_modules", packageName, relative);
+  return path.join(dependencyDir, relative);
 }
