@@ -114,6 +114,10 @@ export class PlayScene extends Phaser.Scene {
     this.input.keyboard?.on("keydown", (event: KeyboardEvent) => {
       this.onKey(event);
     });
+    document.body.dataset["scene"] = "play";
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      delete document.body.dataset["scene"];
+    });
 
     this.draw();
     this.platform.gameplayStart();
@@ -157,6 +161,7 @@ export class PlayScene extends Phaser.Scene {
       }
     });
     if (core.isOver(this.state)) {
+      delete document.body.dataset["scene"];
       const finished = this.state;
       this.time.delayedCall(layout.resultPauseMs, () => {
         this.finish(finished);

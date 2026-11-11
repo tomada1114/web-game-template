@@ -101,7 +101,8 @@ that.
 - Tap/click a tile, or move the cursor with arrow keys and press Enter/Space: the tile
   and its orthogonal neighbours advance one kind; a 120 ms tween shows the change.
 - The move count is mirrored as an integer in text into `#debug-moves`, present in every
-  build, `aria-hidden="true"` and visually hidden, so the smoke test can read it.
+  build, `aria-hidden="true"` and visually hidden, so the smoke test can read it;
+  `body[data-scene="play"]` marks that Play accepts keys.
 - Board solved or move limit reached → Result after a 300 ms pause.
 
 ## Result
