@@ -36,8 +36,10 @@ real only after the preview passes `findPlaceholders` and `assertGeneratedAiLaye
 - The bootstrap writes `.template-origin` (template URL, plus `commit` and `tree`, each
   `unknown` outside a git work tree; `commit` also when the history is shallow or lacks
   `TEMPLATE_ROOT_COMMIT`). Self-removal keeps it, and the template checkout never has
-  one (`tests/template-self.test.ts`). While it exists a run fails with
-  `ERR_ALREADY_BOOTSTRAPPED` before writing anything.
+  one (`tests/template-self.test.ts`). A successful run removes `scripts/bootstrap.mjs`,
+  so the refusal guards only a rerun of a script copied back in: while the file exists,
+  that run fails with `ERR_ALREADY_BOOTSTRAPPED` before any prompt and before writing
+  anything.
 - `CLAUDE.md`'s `## Product` holds four `TODO:` lines that the bootstrap leaves as they
   are. `tests/product-section.test.ts` survives bootstrap: with `.template-origin` it
   fails on each remaining `TODO:` line, and without it on a section with none.

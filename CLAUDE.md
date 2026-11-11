@@ -6,11 +6,10 @@ portal. Development and CI run on Node >= 24 with pnpm 11 through Corepack; neve
 `devEngines.runtime`'s `onFail: error`. It is a pnpm workspace: `packages/core` holds
 the game rules, and `apps/web` builds them into a static site with Vite 8.
 
-The game side beyond that skeleton (seeded rules, scenes, portal adapter, release flow)
-is not built yet; its design decisions are the drafts under `docs/design/skill-drafts/`,
-with requirements in `docs/product/requirements.md`. Read the matching draft before
-implementing that part. Conventions for a kind of file live in `.claude/rules/`;
-procedures in `.claude/skills/`.
+Design decisions are the drafts under `docs/design/skill-drafts/`, requirements in
+`docs/product/requirements.md`; read the matching draft before implementing that part.
+File conventions live in `.claude/rules/`, procedures in `.claude/skills/`, and
+machine-enforceable rules in the configs: running the gate is how you learn them.
 
 ## Product
 
@@ -115,5 +114,6 @@ tests/             # repository-level tests
   runtime behavior, an error `code`, a setup step), not by which directory changed. When
   something observable moved, the `README.md` example and the affected `docs/` page
   change in the same pull request; otherwise say that no documentation change is needed.
-- Sub-agent tiers are named by role (`executor`, `architect`, `scout`, `worker`, in
-  `.claude/agents/`); hand a step to one with `subagent_type`, never a bare `model`.
+- Sub-agent tiers are named by role (`executor`, `architect`, `scout`, `worker`; in
+  `.claude/agents/`), never by model name or effort. Hand a step to a tier with
+  `subagent_type`, never a bare `model`, whose effort would come from the session.
