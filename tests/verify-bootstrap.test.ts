@@ -212,7 +212,7 @@ describe("assertGenerated", () => {
     }
     writeFileSync(
       path.join(destination, "CHANGELOG.md"),
-      "# Changelog\n\nAll notable changes are documented here.\n",
+      "# Changelog\n\nAll notable changes are documented here.\n\n## [Unreleased]\n",
     );
     writeFileSync(
       path.join(destination, "package.json"),
@@ -303,6 +303,42 @@ describe("assertGenerated", () => {
       path.join(destination, "CHANGELOG.md"),
       "# Changelog\n\n## 1.0.0 - 2024-01-01\n",
     );
+
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
+      /ERR_CHANGELOG_ENTRY_REMAINING/,
+    );
+  });
+
+  it("throws ERR_CHANGELOG_ENTRY_REMAINING when an entry follows ## [Unreleased]", () => {
+    const destination = makeDestination();
+    writeValidFixture(destination, "acme-game");
+    writeFileSync(
+      path.join(destination, "CHANGELOG.md"),
+      "# Changelog\n\n## [Unreleased]\n\n- something\n",
+    );
+
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
+      /ERR_CHANGELOG_ENTRY_REMAINING/,
+    );
+  });
+
+  it("throws ERR_CHANGELOG_ENTRY_REMAINING when an entry precedes ## [Unreleased]", () => {
+    const destination = makeDestination();
+    writeValidFixture(destination, "acme-game");
+    writeFileSync(
+      path.join(destination, "CHANGELOG.md"),
+      "# Changelog\n\n- something\n\n## [Unreleased]\n",
+    );
+
+    expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
+      /ERR_CHANGELOG_ENTRY_REMAINING/,
+    );
+  });
+
+  it("throws ERR_CHANGELOG_ENTRY_REMAINING when ## [Unreleased] is missing", () => {
+    const destination = makeDestination();
+    writeValidFixture(destination, "acme-game");
+    writeFileSync(path.join(destination, "CHANGELOG.md"), "# Changelog\n");
 
     expect(() => assertGenerated(destination, "acme-game", TITLE)).toThrow(
       /ERR_CHANGELOG_ENTRY_REMAINING/,

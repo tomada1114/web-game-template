@@ -29,8 +29,9 @@ credentials, concurrency groups). The judgment it cannot encode:
 
 - A new workflow file is warranted only by a new trigger shape or a separate permission
   footprint; otherwise add a job to `ci.yml`.
-- `pr-label.yml` is deliberately the only workflow with write permission. A second write
-  grant is a security change and is reviewed as one.
+- `pr-label.yml` (a label) and `release.yml` (the GitHub Release, on a pushed tag only)
+  are deliberately the only workflows with write permission. Another write grant is a
+  security change and is reviewed as one.
 - Removing or narrowing a pin, a `permissions` block, or a timeout needs its reason in
   the pull request body.
 

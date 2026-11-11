@@ -974,6 +974,7 @@ describe("the workflows in .github/workflows", () => {
       "ci.yml",
       "dependency-review.yml",
       "pr-label.yml",
+      "release.yml",
       "security-audit.yml",
       "typos.yml",
     ]);
@@ -1027,13 +1028,180 @@ describe("the workflows in .github/workflows", () => {
 
   it("grants a write scope only where the job cannot do its work without one", () => {
     // pr-label writes a label and tolerates the read-only token a fork PR
-    // gets. Everything else, and in particular everything that runs
-    // repository code, stays read-only.
+    // gets; release runs only on a pushed tag and writes the GitHub Release.
+    // Everything else, and in particular everything a pull request runs,
+    // stays read-only.
     const writers = workflowNames.filter((name) =>
       scan(workflowSource(name)).some((line) => line.text.endsWith(": write")),
     );
 
-    expect(writers.sort()).toEqual(["pr-label.yml"]);
+    expect(writers.sort()).toEqual(["pr-label.yml", "release.yml"]);
+  });
+});
+
+describe("release.yml releases a tag as a GitHub Release with the portal zip", () => {
+  const source = workflowSource("release.yml");
+  const lines = scan(source);
+  const jobs = jobsOf(lines);
+  const commands = runCommands(source);
+  const steps = jobs[0] === undefined ? [] : stepsOf(jobs[0]);
+
+  function present<T>(value: T | undefined, what: string): T {
+    if (value === undefined) {
+      throw new Error(`release.yml has no ${what}.`);
+    }
+    return value;
+  }
+
+  function blockAt(key: string): string[] {
+    const header = present(topLevel(lines, key), `top-level ${key}`);
+    return blockOf(lines, lines.indexOf(header)).map((line) => line.text);
+  }
+
+  function commandIndex(pattern: RegExp): number {
+    return commands.findIndex(({ command }) => pattern.test(command));
+  }
+
+  it("runs on a pushed vX.Y.Z tag and nothing else", () => {
+    expect(blockAt("on")).toEqual(["push:", 'tags: ["v*.*.*"]']);
+  });
+
+  it("serializes runs per tag without cancelling one in progress", () => {
+    expect(blockAt("concurrency")).toEqual([
+      "group: release-${{ github.ref }}",
+      "cancel-in-progress: false",
+    ]);
+  });
+
+  it("grants contents: write on the job only", () => {
+    expect(inlineValue(present(topLevel(lines, "permissions"), "permissions"))).toBe(
+      "{}",
+    );
+    expect(jobs).toHaveLength(1);
+    const job = present(jobs[0], "job");
+    const permissions = present(jobKey(job, "permissions"), "job permissions");
+    const scopes = blockOf(job.body, job.body.indexOf(permissions)).map((line) =>
+      line.text.replace(/\s*#.*$/, ""),
+    );
+
+    expect(scopes).toEqual(["contents: write"]);
+  });
+
+  function stepNamed(name: string): number {
+    return steps.findIndex((step) =>
+      step.some((line) => line.text === `- name: ${name}`),
+    );
+  }
+
+  function stepRunning(pattern: RegExp): number {
+    return steps.findIndex((step) =>
+      commands.some(
+        ({ line, command }) =>
+          step.some((stepLine) => stepLine.number === line) && pattern.test(command),
+      ),
+    );
+  }
+
+  it("checks the tag against apps/web/package.json before installing anything", () => {
+    const tagCheck = stepNamed("Check the tag matches apps/web/package.json");
+    const install = stepRunning(/\bpnpm install\b/);
+
+    expect(tagCheck).toBeGreaterThanOrEqual(0);
+    expect(stepRunning(/apps\/web\/package\.json/)).toBe(tagCheck);
+    expect(stepUsing(steps, "pnpm/action-setup@")).toBeGreaterThan(tagCheck);
+    expect(install).toBeGreaterThan(tagCheck);
+    const check = commands[commandIndex(/apps\/web\/package\.json/)]?.command ?? "";
+    expect(check).toContain('"$TAG" != "v$VERSION"');
+    expect(check).toMatch(/::error::.*\$TAG.*\$VERSION/);
+    expect(check).toContain("exit 1");
+  });
+
+  it("accepts only a vMAJOR.MINOR.PATCH tag of digits, refusing a prerelease", () => {
+    const check = commands[commandIndex(/apps\/web\/package\.json/)]?.command ?? "";
+
+    expect(check).toContain('[[ "$TAG" =~ ^v[0-9]+\\.[0-9]+\\.[0-9]+$ ]]');
+    expect(check).toMatch(/::error::Tag \$TAG is not vMAJOR\.MINOR\.PATCH/);
+    expect(check.indexOf("=~")).toBeLessThan(check.indexOf("jq "));
+  });
+
+  it("fails clearly when apps/web/package.json has no string version", () => {
+    const check = commands[commandIndex(/apps\/web\/package\.json/)]?.command ?? "";
+
+    expect(check).toContain(
+      "if ! VERSION=\"$(jq -er '.version | strings' apps/web/package.json)\"; then",
+    );
+    expect(check).toMatch(/::error::apps\/web\/package\.json has no string version/);
+  });
+
+  it("releases only a tag on the default branch, checked before installing", () => {
+    const ancestry = stepRunning(/\bgit merge-base --is-ancestor\b/);
+    const command = commands[commandIndex(/\bgit merge-base --is-ancestor\b/)]?.command;
+
+    expect(ancestry).toBeGreaterThanOrEqual(0);
+    expect(command).toContain(
+      'git merge-base --is-ancestor "$GITHUB_SHA" "origin/$DEFAULT_BRANCH"',
+    );
+    expect(command).toMatch(/::error::.*\$GITHUB_SHA.*origin\/\$DEFAULT_BRANCH/);
+    expect(source).toContain(
+      "DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}",
+    );
+    expect(stepUsing(steps, "pnpm/action-setup@")).toBeGreaterThan(ancestry);
+    expect(stepRunning(/\bpnpm install\b/)).toBeGreaterThan(ancestry);
+    // The default branch is only visible with full history.
+    const checkout = present(steps[stepUsing(steps, "actions/checkout@")], "checkout");
+    expect(checkout.map((line) => line.text)).toEqual(
+      expect.arrayContaining(["fetch-depth: 0", "persist-credentials: false"]),
+    );
+  });
+
+  it("runs the full gate exactly once and builds nothing else", () => {
+    const gates = commands.filter(({ command }) =>
+      /\bpnpm (?:run )?check\b/.test(command),
+    );
+
+    expect(gates).toHaveLength(1);
+    expect(
+      commands.filter(({ command }) =>
+        /\b(?:build|package:crazygames|budget|vite)\b/.test(command),
+      ),
+    ).toEqual([]);
+    expect(commandIndex(/\bpnpm (?:run )?check\b/)).toBeGreaterThan(
+      commandIndex(/\bpnpm install --frozen-lockfile\b/),
+    );
+  });
+
+  it("restores no dependency cache on a tag build", () => {
+    expect(lines.some((line) => line.text === "package-manager-cache: false")).toBe(
+      true,
+    );
+    expect(usesOf(lines).filter(({ ref }) => ref.startsWith("actions/cache@"))).toEqual(
+      [],
+    );
+  });
+
+  it("creates the release with gh after the gate, using no third-party release action", () => {
+    const release = commandIndex(/\bgh release create\b/);
+
+    expect(
+      commands[release]?.command
+        .trim()
+        .split("\n")
+        .map((line) => line.trim()),
+    ).toEqual([
+      'if gh release view "$TAG" > /dev/null 2>&1; then',
+      'gh release upload "$TAG" .package/*.zip --clobber',
+      "else",
+      'gh release create "$TAG" .package/*.zip --generate-notes',
+      "fi",
+    ]);
+    expect(release).toBe(commands.length - 1);
+    expect(release).toBeGreaterThan(commandIndex(/\bpnpm (?:run )?check\b/));
+    expect(source).toContain("GH_TOKEN: ${{ github.token }}");
+    expect(
+      usesOf(lines)
+        .map(({ ref }) => ref.split("@")[0])
+        .sort(),
+    ).toEqual(["actions/checkout", "actions/setup-node", "pnpm/action-setup"]);
   });
 });
 
