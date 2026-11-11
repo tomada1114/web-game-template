@@ -68,21 +68,23 @@ socket.on("connect", () => process.exit(0));
 socket.on("timeout", () => process.exit(2));
 socket.on("error", (error) => process.exit(error.code === "ECONNREFUSED" ? 1 : 2));'
 ready='const fs = require("node:fs");
-const [log, port] = process.argv.slice(1);
+const [log, port, pid] = process.argv.slice(1);
+const alive = () => { try { process.kill(Number(pid), 0); return true; } catch { return false; } };
 let tries = 0;
 setInterval(() => {
   const text = fs.readFileSync(log, "utf8");
   if (text.includes(`http://127.0.0.1:${port}/`)) process.exit(0);
-  if (/error/i.test(text) || ++tries > 300) process.exit(1);
+  if (!alive() || ++tries > 300) process.exit(1);
 }, 100);'
+mode=  # empty for the dev server; "preview" for the build
 port=$(node -e 'const server = require("node:net").createServer(); server.listen(0, "127.0.0.1", () => { console.log(server.address().port); server.close(); });')
 log=$(mktemp)
 node -e "$probe" "$port"; rc=$?
 if [ "$rc" = 1 ]; then
-  pnpm -C apps/web exec vite --host 127.0.0.1 --port "$port" --strictPort >"$log" 2>&1 &
+  (cd apps/web && exec node node_modules/vite/bin/vite.js $mode --host 127.0.0.1 --port "$port" --strictPort) >"$log" 2>&1 &
   pid=$!
   trap 'kill "$pid" 2>/dev/null; wait "$pid" 2>/dev/null' EXIT
-  if node -e "$ready" "$log" "$port" && kill -0 "$pid" 2>/dev/null; then
+  if node -e "$ready" "$log" "$port" "$pid" && kill -0 "$pid" 2>/dev/null; then
     page=$(curl -sS "http://127.0.0.1:$port/index.html")
     printf '%s\n' "$page"
     for asset in $(printf '%s\n' "$page" | grep -oE '(src|href)="[^"]+"' | cut -d'"' -f2); do
@@ -105,17 +107,19 @@ else
 fi
 ```
 
-- **The build instead of the source.** Run `pnpm build` first, then start
-  `pnpm -C apps/web exec vite preview` with the same three flags. Everything else in the
-  script stays.
+- **The build instead of the source.** Run `pnpm build` first, then set `mode=preview`.
+  Everything else in the script stays.
 - **The port check** is a Node probe, which the repository needs anyway, rather than
   `lsof` or `ss`, which a host may lack. Exit 1 means nothing accepts connections; 0
   means something does; anything else means the check failed, and only exit 1 counts as
   proof.
 - **Waiting** reads the server's own log for the URL Vite prints once it listens, so no
   request goes out before your server holds the port. It gives up after 30 seconds, or
-  at once on an error line such as a taken port.
-- **Stopping.** `$!` is the pid of `pnpm`, which passes the signal on to Vite.
+  as soon as the server process has exited (a taken port, a broken config), so a
+  harmless log line that mentions an error does not abort a healthy start.
+- **Stopping.** Vite's own binary is started with `node`, and the subshell `exec`s it,
+  so `$!` is Vite itself. Started through `pnpm exec`, `$!` would be the pnpm wrapper,
+  and a Vite it failed to pass the signal to would keep the port.
 - **A host that runs long commands in the background** follows the same steps; the stop
   and the final check still happen before the turn ends.
 

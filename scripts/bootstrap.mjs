@@ -126,9 +126,13 @@ const AI_LAYER_TARGETS = [
   ".claude/rules/scripts.md",
   ".claude/rules/tests.md",
   ".claude/rules/typescript.md",
+  ".claude/skills/create-pr/SKILL.md",
   ".claude/skills/merge-dependabot/SKILL.md",
   ".claude/skills/merge-dependabot/references/failure-modes.md",
   ".claude/skills/merge-dependabot/scripts/survey-prs.mjs",
+  ".claude/skills/running-the-app/SKILL.md",
+  ".claude/skills/smart-commit/SKILL.md",
+  ".claude/skills/tdd/SKILL.md",
 ];
 
 // Bootstrap-only markers: a `template-only` block is removed from every

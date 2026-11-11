@@ -43,6 +43,8 @@ from pathlib import Path
 from typing import Any
 
 SKILL_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(SKILL_DIR))
+from issue_digest import format_tracking_line  # noqa: E402
 # How many worktrees a run will hold open at once unless the caller says
 # otherwise. Three is a balance struck in cost-discipline.md, not a technical
 # limit; --max-parallel is how a caller who asked for more gets it.
@@ -514,8 +516,7 @@ def main() -> int:
         print("held: " + ", ".join(
             f"#{r['number']} {r['readiness']}" for r in held[:6]) + more)
     if tracking:
-        print("tracking: " + ",".join(f"#{n}" for n in tracking)
-              + " — never shipped; ship the sub-issues instead")
+        print(format_tracking_line(tracking))
     print()
     print(f"next: {next_cmd}")
     print("verdict: READY")

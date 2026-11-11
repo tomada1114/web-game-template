@@ -752,7 +752,8 @@ class NeverShippedLabelsTest(DigestRunner, unittest.TestCase):
         self.assertEqual([r["number"] for r in payload["ranking"]], [2])
         # `issues` is what apply_priority_labels.py --backfill walks.
         self.assertEqual([i["number"] for i in payload["issues"]], [2])
-        self.assertEqual(payload["open_issue_count"], 1)
+        self.assertEqual(payload["open_issue_count"], 2)
+        self.assertEqual(payload["tracking_issue_count"], 1)
         coverage = payload["label_coverage"]
         self.assertTrue(coverage["complete"])
         self.assertEqual(coverage["total"], 1)
@@ -768,18 +769,35 @@ class NeverShippedLabelsTest(DigestRunner, unittest.TestCase):
         self.assertIn("contract: 1/1 complete", out)
         self.assertNotIn("missing: #1", out)
 
-    def test_an_issue_waiting_on_a_tracking_issue_stays_blocked(self):
-        # Dropping the tracking issue from the ranking must not drop the edge:
-        # a silently unblocked issue would be picked ahead of what it waits on.
+    def test_an_issue_waiting_on_a_tracking_issue_is_not_blocked(self):
+        # The parent closes only after its children, so a sub-issue that says
+        # "requires #<parent>" would otherwise be blocked forever.
         issues = [
             gh_issue(1, title="roadmap", labels=["tracking"]),
             gh_issue(2, title="waits", labels=["priority: P0"],
-                     body="depends on #1"),
+                     body="requires #1"),
         ]
         rc, out, err = self._run(["--select"], issues)
         self.assertEqual(rc, 0, err)
-        self.assertIn("select: none", out)
-        self.assertIn("#2[P0] BLOCKED-BY:#1", out)
+        self.assertIn("select: #2", out)
+        self.assertNotIn("BLOCKED-BY", out)
+
+    def test_a_tracking_issue_gives_its_children_no_unblock_credit(self):
+        issues = [
+            gh_issue(1, title="roadmap", labels=["tracking"],
+                     body="- [ ] #2\n\nblocks #2, #3\n\nThis requires #3"),
+            gh_issue(2, title="child", labels=["priority: P2"]),
+            gh_issue(3, title="child", labels=["priority: P2"]),
+        ]
+        rc, out, err = self._run(["--json"], issues)
+        self.assertEqual(rc, 0, err)
+        payload = json.loads(out)
+        control = json.loads(self._run(["--json"], issues[1:])[1])
+        for got, base in zip(payload["issues"], control["issues"]):
+            self.assertEqual(got["unblocks_open"], [])
+            self.assertEqual(got["referenced_by_open"], [])
+            self.assertEqual(got["priority_score"], base["priority_score"])
+            self.assertEqual(got["suggested_tier"], base["suggested_tier"])
 
     def test_full_digest_lists_tracking_issues_on_their_own_line(self):
         issues = [
@@ -788,7 +806,7 @@ class NeverShippedLabelsTest(DigestRunner, unittest.TestCase):
         ]
         rc, out, err = self._run([], issues)
         self.assertEqual(rc, 0, err)
-        self.assertIn("# Open issues (1)", out)
+        self.assertIn("# Open issues (2, 1 tracking)", out)
         self.assertIn("tracking: #1", out)
         self.assertNotIn("## #1 ", out)
 

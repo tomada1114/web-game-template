@@ -72,7 +72,8 @@ phrasings. These edges only appear on reading:
   shortlisted issues name the same symbol or the same failure, ship one first and rebase
   the other on the result — or report them as one issue.
 - **Umbrella issues** — an epic listing `- [ ] #12 #13 #14` is not itself implementable.
-  Treat it as a container: ship the children, leave the epic.
+  It carries the `tracking` label and no tier (see `triaging-issues`); the digest drops
+  it and its edges before ranking. Ship the children, leave the epic.
 
 When two issues could reasonably go either order, prefer the one that is smaller and
 touches fewer files first — it shortens the window in which the other's branch can

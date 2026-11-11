@@ -40,6 +40,11 @@ Decide this before the test: the layer decides the surface and the Vitest projec
 - A decision (a rule, a calculation, a state transition) goes in `packages/core/src/`.
   Whatever is random or timed enters as an argument, so the test passes a fixed seed or
   a fixed timestamp and expects one exact result.
+- The `automation` project runs only the files named in `automationTests` in
+  `vitest.config.ts`; every other file under `tests/` runs in `unit`, under its 5-second
+  timeout. Add a new filesystem, subprocess, or git test to that list before its red
+  run, or `--project automation` reports "No test files found" and the test runs under
+  the unit timeout instead.
 - No Vitest project reaches the browser entry, `apps/web/src/main.ts`. Move what has to
   be decided there into a pure helper or into core, and test that.
 

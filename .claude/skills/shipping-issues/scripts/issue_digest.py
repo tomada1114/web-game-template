@@ -36,8 +36,10 @@ An issue labelled `tracking` is a checklist of sub-issues, not work. It is
 dropped before ranking: never selected (not even by `--issue N`), never counted
 in the label or contract coverage, never offered a tier to backfill. It is
 listed on a `tracking:` line (`tracking_issues` in `--json`) so the caller ships
-its sub-issues instead. Its dependency edges stay: an issue that says it waits
-on a tracking issue remains BLOCKED-BY it.
+its sub-issues instead. Its dependency edges are dropped both ways: the issues
+it names gain no unblock credit from it, and an issue that says it waits on a
+tracking issue is not BLOCKED-BY it (the parent closes only after its children,
+so such an edge would never clear).
 
 Usage:
     issue_digest.py [--label L]... [--assignee A] [--milestone M]
@@ -187,6 +189,14 @@ READY_NEGATIVE_LABELS = {
 # difference from READY_NEGATIVE_LABELS, whose issues are real work that keeps
 # its tier and waits. normalize_label() output, like every set here.
 TRACKING_LABELS = {"tracking"}
+
+
+def format_tracking_line(numbers: list[int]) -> str:
+    """The `tracking:` line both this digest and plan.py print, or "" when none."""
+    if not numbers:
+        return ""
+    return ("tracking: " + ", ".join(f"#{n}" for n in numbers)
+            + " — never shipped; ship the sub-issues instead")
 
 # The design-not-settled label is a *soft* block, unlike READY_NEGATIVE_LABELS:
 # it is excluded from automatic selection by default, but an explicit issue
@@ -696,6 +706,22 @@ def main() -> int:
             deps["mentions"] = [n for n in deps["mentions"] if n not in declared]
         all_deps[num] = deps
     open_numbers = set(all_deps)
+    # Taken from every open issue, like all_deps: a tracking parent outside an
+    # --issue filter still must not block or credit the selected issue.
+    tracking_numbers = {
+        it["number"] for it in issues
+        if any(normalize_label(lbl["name"]) in TRACKING_LABELS
+               for lbl in it.get("labels", []))
+    }
+    # Edges to or from a tracking issue carry no ordering: its outgoing edges
+    # are a checklist, not prerequisites, and an edge onto it would deadlock a
+    # sub-issue on a parent that closes only after its children.
+    for num, deps in all_deps.items():
+        if num in tracking_numbers:
+            all_deps[num] = {kind: [] for kind in deps}
+        else:
+            for kind in ("depends_on", "blocks"):
+                deps[kind] = [n for n in deps[kind] if n not in tracking_numbers]
 
     # Reverse edges: who is waiting on whom.
     unblocks: dict[int, set[int]] = {n: set() for n in open_numbers}
@@ -721,9 +747,7 @@ def main() -> int:
         if wanted and num not in wanted:
             continue
         labels = [lbl["name"] for lbl in it.get("labels", [])]
-        # Dropped here rather than in the fetch: `all_deps` and `open_numbers`
-        # above still hold it, so an edge onto a tracking issue keeps blocking.
-        if any(normalize_label(lbl) in TRACKING_LABELS for lbl in labels):
+        if num in tracking_numbers:
             tracking_issues.append(num)
             continue
         body = it.get("body") or ""
@@ -814,7 +838,10 @@ def main() -> int:
     needs_design = [r for r in records if r["design_labels"]]
     stale_dependency = [r for r in records if r["stale_dependency_labels"]]
     payload = {
-        "open_issue_count": len(records),
+        # The true open count: tracking issues are dropped from the records
+        # but are still open, so they are counted and also reported apart.
+        "open_issue_count": len(records) + len(tracking_issues),
+        "tracking_issue_count": len(tracking_issues),
         "open_pr_count": len(prs),
         "cache": cache_status,
         "label_coverage": {
@@ -864,11 +891,7 @@ def main() -> int:
 
     cov = payload["label_coverage"]
     ccov = payload["contract_coverage"]
-    tracking_line = (
-        "tracking: " + ", ".join(f"#{n}" for n in payload["tracking_issues"])
-        + " — never shipped; ship the sub-issues instead"
-        if payload["tracking_issues"] else ""
-    )
+    tracking_line = format_tracking_line(payload["tracking_issues"])
     # `contract: N` only earns a slot on the line when some issue actually has
     # one — a repo that has not adopted the block should not read a running
     # complaint about it on every call.
@@ -1018,7 +1041,9 @@ def main() -> int:
                 print("not-in-digest: " + ",".join(f"#{n}" for n in missing))
         return 0
 
-    print(f"# Open issues ({len(records)}) · open PRs ({len(prs)})\n")
+    tracking_part = f", {len(tracking_issues)} tracking" if tracking_issues else ""
+    print(f"# Open issues ({payload['open_issue_count']}{tracking_part}) · "
+          f"open PRs ({len(prs)})\n")
     if tracking_line:
         print(tracking_line + "\n")
     if not records:
