@@ -4,23 +4,6 @@
 
 A short description.
 
-## Quickstart
-
-Requires Node.js 24 and pnpm 11 through Corepack (CONTRIBUTING.md's "Prerequisites" has
-the details).
-
-```sh
-corepack enable
-corepack pnpm@11.18.0 install --frozen-lockfile
-pnpm hooks:install
-pnpm dev
-```
-
-`pnpm dev` starts Vite's dev server for `apps/web` and runs until stopped; open the URL
-it prints (<http://localhost:5173> unless that port is taken). `pnpm build` writes the
-static site to `apps/web/dist`. Every asset URL in it is relative, so the directory can
-be served from any path.
-
 <!-- template-only:start -->
 
 ## Use this template
@@ -38,6 +21,23 @@ description. For automation, pass the slug together with the `--title`, `--autho
 for the complete command syntax. Bootstrap removes this section from the generated
 repository.
 <!-- template-only:end -->
+
+## Quickstart
+
+Requires Node.js 24 and pnpm 11 through Corepack (CONTRIBUTING.md's "Prerequisites" has
+the details).
+
+```sh
+corepack enable
+corepack pnpm@11.18.0 install --frozen-lockfile
+pnpm hooks:install
+pnpm dev
+```
+
+`pnpm dev` starts Vite's dev server for `apps/web` and runs until stopped; open the URL
+it prints (<http://localhost:5173> unless that port is taken). `pnpm build` writes the
+static site to `apps/web/dist`. Every asset URL in it is relative, so the directory can
+be served from any path.
 
 ## Architecture
 
