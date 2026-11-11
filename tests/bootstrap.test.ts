@@ -528,6 +528,17 @@ describe("bootstrap generation", () => {
     const lockfile = readFileSync(path.join(root, "pnpm-lock.yaml"), "utf8");
     expect(lockfile).toContain(`'@${packageName}/core':`);
     expect(lockfile).not.toContain("@my-game/");
+    // A module importing core by its scoped name must follow the rename, or its
+    // import no longer resolves and the typed lint rules fail on it.
+    for (const relative of [
+      "apps/web/src/scenes/PlayScene.ts",
+      "apps/web/src/view/board-view.ts",
+      "apps/web/test/view/board-view.test.ts",
+    ]) {
+      const source = readFileSync(path.join(root, relative), "utf8");
+      expect(source).toContain(`from "@${packageName}/core";`);
+      expect(source).not.toContain("@my-game/");
+    }
 
     const gameInfo = readFileSync(
       path.join(root, "apps", "web", "src", "game-info.ts"),

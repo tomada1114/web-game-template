@@ -1,13 +1,6 @@
 import * as Phaser from "phaser";
 
-import {
-  SAMPLE_CONFIG,
-  applyMove,
-  createGame,
-  isOver,
-  type Move,
-  type State,
-} from "@my-game/core";
+import * as core from "@my-game/core";
 
 import { type Platform } from "../platform/platform.js";
 import { colors, layout, motion, radius, space, type } from "../theme/tokens.js";
@@ -49,9 +42,9 @@ const ARROWS: Readonly<Record<string, Direction>> = {
 
 /** Runs one board: holds the core state and the moves played, and draws `toView(state)`. */
 export class PlayScene extends Phaser.Scene {
-  private state!: State;
+  private state!: core.State;
   /** The moves played on this board; with the seed, they make the replay record. */
-  readonly moves: Move[] = [];
+  readonly moves: core.Move[] = [];
   private tiles: Tile[] = [];
   private cursor = CURSOR_START;
   private counter!: Phaser.GameObjects.Text;
@@ -67,7 +60,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   init(data: PlayData): void {
-    this.state = createGame(data.seed, SAMPLE_CONFIG);
+    this.state = core.createGame(data.seed, core.SAMPLE_CONFIG);
     this.moves.length = 0;
     this.tiles = [];
     this.cursor = CURSOR_START;
@@ -139,10 +132,10 @@ export class PlayScene extends Phaser.Scene {
 
   /** Pointer and keyboard both land here, so the two cannot disagree about a move. */
   private play(cell: number): void {
-    if (this.leaving || isOver(this.state)) return;
+    if (this.leaving || core.isOver(this.state)) return;
     const before = this.state.cells;
-    const move = { cell } satisfies Move;
-    this.state = applyMove(this.state, move);
+    const move = { cell } satisfies core.Move;
+    this.state = core.applyMove(this.state, move);
     this.moves.push(move);
     this.draw();
     this.state.cells.forEach((kind, index) => {
@@ -160,7 +153,7 @@ export class PlayScene extends Phaser.Scene {
         });
       }
     });
-    if (isOver(this.state)) {
+    if (core.isOver(this.state)) {
       const finished = this.state;
       this.time.delayedCall(layout.resultPauseMs, () => {
         this.finish(finished);
@@ -194,7 +187,7 @@ export class PlayScene extends Phaser.Scene {
     }
   }
 
-  private finish(finished: State): void {
+  private finish(finished: core.State): void {
     if (this.leaving) return;
     this.leaving = true;
     this.platform.gameplayStop();

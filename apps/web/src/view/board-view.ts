@@ -1,4 +1,4 @@
-import { SAMPLE_CONFIG, isOver, score, type State } from "@my-game/core";
+import * as core from "@my-game/core";
 
 import { colors, layout } from "../theme/tokens.js";
 
@@ -31,7 +31,7 @@ export function tileStyle(kind: number): TileStyle {
   return style;
 }
 
-const SIDE = SAMPLE_CONFIG.size;
+const SIDE = core.SAMPLE_CONFIG.size;
 const PITCH = layout.tileSize + layout.tileGap;
 const BOARD_EXTENT = SIDE * layout.tileSize + (SIDE - 1) * layout.tileGap;
 
@@ -74,7 +74,7 @@ export interface BoardView {
 }
 
 /** Maps a core state to what Play draws; never mutates `state`. */
-export function toView(state: State): BoardView {
+export function toView(state: core.State): BoardView {
   return {
     cells: state.cells.map((kind, cell) => ({
       cell,
@@ -84,16 +84,16 @@ export function toView(state: State): BoardView {
     })),
     movesUsed: state.movesUsed,
     movesLabel: `Moves ${String(state.movesUsed)} / ${String(state.limit)}`,
-    over: isOver(state),
+    over: core.isOver(state),
   };
 }
 
 /** Result's headline and score line for a finished state. */
-export function resultLines(state: State): {
+export function resultLines(state: core.State): {
   readonly headline: string;
   readonly score: string;
 } {
-  const points = score(state);
+  const points = core.score(state);
   return {
     headline: points > 0 ? "Solved!" : "Out of moves",
     score: `Score ${String(points)}/${String(state.limit)}`,

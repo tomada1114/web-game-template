@@ -1,4 +1,4 @@
-import { SAMPLE_CONFIG, applyMove, createGame, type State } from "@my-game/core";
+import * as core from "@my-game/core";
 import { describe, expect, it } from "vitest";
 
 import { colors, layout } from "../../src/theme/tokens.js";
@@ -16,7 +16,7 @@ import {
   toView,
 } from "../../src/view/board-view.js";
 
-function stateOf(cells: readonly number[], movesUsed = 0): State {
+function stateOf(cells: readonly number[], movesUsed = 0): core.State {
   return { seed: 1, cells, movesUsed, limit: 20 };
 }
 
@@ -46,7 +46,7 @@ describe("cellCenter", () => {
 
 describe("toView", () => {
   it("describes every cell with its kind, glyph, colour and position", () => {
-    const state = createGame(42, SAMPLE_CONFIG);
+    const state = core.createGame(42, core.SAMPLE_CONFIG);
     const view = toView(state);
     expect(view.cells).toHaveLength(25);
     view.cells.forEach((cell, index) => {
@@ -63,7 +63,7 @@ describe("toView", () => {
   it("advances the pressed cell and its neighbours after a move on cell 12", () => {
     const start = stateOf(Array.from({ length: 25 }, () => 0));
     const before = { ...start, cells: start.cells.map((_, i) => (i === 0 ? 1 : 0)) };
-    const after = applyMove(before, { cell: 12 });
+    const after = core.applyMove(before, { cell: 12 });
     const view = toView(after);
     const changed = view.cells.filter((cell) => cell.kind !== before.cells[cell.cell]);
     expect(changed.map((cell) => cell.cell)).toEqual([7, 11, 12, 13, 17]);
@@ -73,7 +73,7 @@ describe("toView", () => {
   });
 
   it("does not mutate the state", () => {
-    const state = createGame(7, SAMPLE_CONFIG);
+    const state = core.createGame(7, core.SAMPLE_CONFIG);
     const copy = structuredClone(state);
     toView(state);
     expect(state).toEqual(copy);
