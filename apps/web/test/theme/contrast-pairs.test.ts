@@ -1,4 +1,3 @@
-/// <reference types="vite/client" />
 import { describe, expect, it } from "vitest";
 
 import { colors } from "../../src/theme/tokens.js";
@@ -38,42 +37,74 @@ function contrastRatio(a: number, b: number): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+function isPair(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** Every problem with the colours and pairs, one line each; empty when all pass. */
 function contrastProblems(
   palette: Readonly<Record<string, Colour>>,
-  pairs: readonly Pair[],
+  pairs: unknown,
 ): string[] {
   const problems: string[] = [];
+  if (!Array.isArray(pairs)) return ["the contrast pairs are not an array"];
   if (pairs.length === 0) problems.push("no contrast pair is listed");
+  const valid = new Set<string>();
   for (const [token, { hex, css }] of Object.entries(palette)) {
+    if (!Number.isInteger(hex) || hex < 0 || hex > 0xffffff) {
+      problems.push(`${token}: hex ${String(hex)} is not a 24-bit colour`);
+      continue;
+    }
+    valid.add(token);
     const expected = `#${hex.toString(16).padStart(6, "0")}`;
     if (css !== undefined && css.toLowerCase() !== expected) {
       problems.push(`${token}: css ${css} does not match hex ${expected}`);
     }
   }
   const names = new Set<string>();
+  const combos = new Map<string, string>();
   const used = new Set<string>();
-  for (const pair of pairs) {
-    if (names.has(pair.name)) problems.push(`duplicate pair name "${pair.name}"`);
-    names.add(pair.name);
-    used.add(pair.fg);
-    used.add(pair.bg);
-    const threshold = Object.hasOwn(thresholds, pair.kind)
-      ? thresholds[pair.kind]
-      : undefined;
-    if (threshold === undefined)
-      problems.push(`"${pair.name}": unknown kind "${pair.kind}"`);
-    const fg = Object.hasOwn(palette, pair.fg) ? palette[pair.fg] : undefined;
-    const bg = Object.hasOwn(palette, pair.bg) ? palette[pair.bg] : undefined;
-    if (fg === undefined)
-      problems.push(`"${pair.name}": ${pair.fg} is not a colour token`);
-    if (bg === undefined)
-      problems.push(`"${pair.name}": ${pair.bg} is not a colour token`);
+  for (const [index, entry] of (pairs as unknown[]).entries()) {
+    if (!isPair(entry)) {
+      problems.push(`pair #${String(index)} is not an object`);
+      continue;
+    }
+    const { name, fg: fgToken, bg: bgToken, kind } = entry;
+    if (typeof name !== "string" || name === "") {
+      problems.push(`pair #${String(index)} has no name`);
+      continue;
+    }
+    if (
+      typeof fgToken !== "string" ||
+      typeof bgToken !== "string" ||
+      typeof kind !== "string"
+    ) {
+      problems.push(`"${name}": fg, bg and kind must be strings`);
+      continue;
+    }
+    if (names.has(name)) problems.push(`duplicate pair name "${name}"`);
+    names.add(name);
+    const combo = `${fgToken}\u0000${bgToken}`;
+    const first = combos.get(combo);
+    if (first !== undefined) {
+      problems.push(
+        `"${name}": ${fgToken} on ${bgToken} is already listed as "${first}"`,
+      );
+    } else combos.set(combo, name);
+    used.add(fgToken);
+    used.add(bgToken);
+    const threshold = Object.hasOwn(thresholds, kind) ? thresholds[kind] : undefined;
+    if (threshold === undefined) problems.push(`"${name}": unknown kind "${kind}"`);
+    const fg = Object.hasOwn(palette, fgToken) ? palette[fgToken] : undefined;
+    const bg = Object.hasOwn(palette, bgToken) ? palette[bgToken] : undefined;
+    if (fg === undefined) problems.push(`"${name}": ${fgToken} is not a colour token`);
+    if (bg === undefined) problems.push(`"${name}": ${bgToken} is not a colour token`);
     if (fg === undefined || bg === undefined || threshold === undefined) continue;
+    if (!valid.has(fgToken) || !valid.has(bgToken)) continue;
     const ratio = contrastRatio(fg.hex, bg.hex);
     if (!(ratio >= threshold)) {
       problems.push(
-        `"${pair.name}" ${ratio.toFixed(2)} < ${threshold.toFixed(1)} (${pair.kind})`,
+        `"${name}" ${ratio.toFixed(2)} < ${threshold.toFixed(1)} (${kind})`,
       );
     }
   }
@@ -83,31 +114,36 @@ function contrastProblems(
   return problems;
 }
 
-const loaded: Record<string, readonly Pair[]> = import.meta.glob(
+// A computed specifier keeps the file out of the web test program's module graph,
+// which resolves no JSON and carries no Node or Vite ambient types. Parsed as
+// unknown: contrastProblems checks the shape, so a malformed file is reported
+// rather than crashing a test.
+const pairsUrl = new URL(
   "../../../../docs/design/contrast-pairs.json",
-  { eager: true, import: "default" },
+  import.meta.url,
 );
-const files = Object.values(loaded);
-const pairs = files[0] ?? [];
+const pairsModule = (await import(pairsUrl.href, { with: { type: "json" } })) as {
+  readonly default: unknown;
+};
+const pairsFile = pairsModule.default;
+const pairs: readonly Pair[] = Array.isArray(pairsFile) ? (pairsFile as Pair[]) : [];
 
 describe("contrast pairs", () => {
-  it("loads exactly one pairs file", () => {
-    expect(files).toHaveLength(1);
-  });
-
   it("passes every pair in docs/design/contrast-pairs.json against tokens.ts", () => {
-    expect(contrastProblems(colors, pairs)).toEqual([]);
+    expect(contrastProblems(colors, pairsFile)).toEqual([]);
   });
 
   it("measures the ratios the design direction records", () => {
     const measured = Object.fromEntries(
-      pairs.map((p) => [
-        p.name,
-        contrastRatio(
-          colors[p.fg as keyof typeof colors].hex,
-          colors[p.bg as keyof typeof colors].hex,
-        ).toFixed(2),
-      ]),
+      pairs.map((p) => {
+        const palette: Readonly<Record<string, Colour>> = colors;
+        const fg = Object.hasOwn(palette, p.fg) ? palette[p.fg] : undefined;
+        const bg = Object.hasOwn(palette, p.bg) ? palette[p.bg] : undefined;
+        if (fg === undefined || bg === undefined) {
+          return [p.name, `names a missing token (${p.fg} on ${p.bg})`];
+        }
+        return [p.name, contrastRatio(fg.hex, bg.hex).toFixed(2)];
+      }),
     );
     expect(measured).toEqual({
       "text on bg": "16.15",
@@ -209,5 +245,59 @@ describe("contrastProblems", () => {
         { name: "p", fg: "white", bg: "black", kind: "text" },
       ]),
     ).toEqual(["black: css #000001 does not match hex #000000"]);
+  });
+
+  it("fails a duplicate fg/bg pair under another name", () => {
+    expect(
+      contrastProblems({ black, white }, [
+        { name: "a", fg: "white", bg: "black", kind: "text" },
+        { name: "b", fg: "white", bg: "black", kind: "text" },
+        { name: "c", fg: "black", bg: "white", kind: "text" },
+      ]),
+    ).toEqual(['"b": white on black is already listed as "a"']);
+  });
+
+  it("fails a pair with a missing or empty name", () => {
+    expect(
+      contrastProblems({ black, white }, [
+        { name: "p", fg: "white", bg: "black", kind: "text" },
+        { fg: "black", bg: "white", kind: "text" },
+        { name: "", fg: "black", bg: "white", kind: "text" },
+      ]),
+    ).toEqual(["pair #1 has no name", "pair #2 has no name"]);
+  });
+
+  it("fails a hex outside 0..0xFFFFFF or not an integer", () => {
+    const palette = {
+      black,
+      white,
+      big: { hex: 0x1000000 },
+      negative: { hex: -1 },
+      fraction: { hex: 0.5 },
+    };
+    expect(
+      contrastProblems(palette, [
+        { name: "p", fg: "white", bg: "black", kind: "text" },
+        { name: "q", fg: "big", bg: "negative", kind: "ui" },
+        { name: "r", fg: "fraction", bg: "black", kind: "ui" },
+      ]),
+    ).toEqual([
+      "big: hex 16777216 is not a 24-bit colour",
+      "negative: hex -1 is not a 24-bit colour",
+      "fraction: hex 0.5 is not a 24-bit colour",
+    ]);
+  });
+
+  it("reports a pairs file that is not an array, or holds a non-object entry", () => {
+    expect(contrastProblems({}, { pairs: [] })).toEqual([
+      "the contrast pairs are not an array",
+    ]);
+    expect(
+      contrastProblems({ black, white }, [
+        null,
+        { name: "p", fg: "white", bg: "black", kind: "text" },
+        { name: "q", fg: 1, bg: "black", kind: "text" },
+      ]),
+    ).toEqual(["pair #0 is not an object", '"q": fg, bg and kind must be strings']);
   });
 });
