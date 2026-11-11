@@ -2,7 +2,16 @@ import { defineConfig, devices } from "@playwright/test";
 
 // A distinct E2E_PORT lets parallel worktrees each run the smoke test; with
 // strictPort a taken port fails the run instead of serving somewhere else.
-const port = Number(process.env["E2E_PORT"] ?? 4173);
+const port = parsePort(process.env["E2E_PORT"]);
+
+function parsePort(raw: string | undefined): number {
+  if (raw === undefined || raw === "") return 4173;
+  const value = Number(raw);
+  if (!/^\d+$/.test(raw) || value < 1 || value > 65_535) {
+    throw new Error(`E2E_PORT must be an integer from 1 to 65535; got "${raw}".`);
+  }
+  return value;
+}
 const baseURL = `http://127.0.0.1:${String(port)}`;
 
 export default defineConfig({
@@ -10,7 +19,7 @@ export default defineConfig({
   forbidOnly: true,
   retries: 0,
   reporter: process.env["CI"] ? [["list"], ["html", { open: "never" }]] : "list",
-  use: { baseURL },
+  use: { baseURL, trace: "retain-on-failure", screenshot: "only-on-failure" },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
     // `vite` is apps/web's devDependency, not the root's, and a path keeps the
@@ -20,6 +29,7 @@ export default defineConfig({
     // Always the local build: VITE_PLATFORM=crazygames would inject the SDK.
     env: { VITE_PLATFORM: "local" },
     reuseExistingServer: false,
-    timeout: 120_000,
+    // Covers a cold `pnpm run build` plus the preview server's start, not the start alone.
+    timeout: 180_000,
   },
 });

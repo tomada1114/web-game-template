@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect as baseExpect, test } from "@playwright/test";
 
 test("the built game boots, starts Practice, and plays one move", async ({ page }) => {
   const errors: string[] = [];
@@ -8,6 +8,11 @@ test("the built game boots, starts Practice, and plays one move", async ({ page 
   page.on("pageerror", (error) => {
     errors.push(`pageerror: ${error.message}`);
   });
+
+  // Every assertion names the errors collected so far, so a script error that
+  // breaks boot reads as that error rather than as a bare locator timeout.
+  const expect = <T>(actual: T) =>
+    baseExpect(actual, `page errors so far: ${JSON.stringify(errors)}`);
 
   await page.goto("./");
   await expect(page.locator('body[data-ready="true"]')).toBeAttached({
@@ -29,5 +34,5 @@ test("the built game boots, starts Practice, and plays one move", async ({ page 
     await expect(moves).toHaveText("1", { timeout: 1_000 });
   }).toPass({ timeout: 10_000 });
 
-  expect(errors).toEqual([]);
+  baseExpect(errors).toEqual([]);
 });

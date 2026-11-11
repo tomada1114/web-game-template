@@ -3,6 +3,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -13,6 +14,8 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { clean } from "../scripts/clean.mjs";
+
+const repoRoot = path.resolve(import.meta.dirname, "..");
 
 // scripts/clean.mjs imports `console` from "node:console" (a
 // `.claude/rules/scripts.md` convention), which is a distinct object from the
@@ -198,5 +201,16 @@ describe("clean", () => {
 
     expect(clean(["dist"], path.join(makeRoot(), "missing"))).toBe(1);
     expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("ERR_CLEAN_FAILED"));
+  });
+
+  it("is wired by `pnpm clean` to every generated output directory, Playwright's included", () => {
+    const manifest = JSON.parse(
+      readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+    ) as { scripts: Record<string, string> };
+    const targets = (manifest.scripts["clean"] ?? "").split(" ").slice(2);
+
+    expect(targets).toEqual(
+      expect.arrayContaining(["coverage", "test-results", "playwright-report"]),
+    );
   });
 });

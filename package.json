@@ -35,7 +35,7 @@
   "scripts": {
     "dev": "pnpm -C apps/web exec vite",
     "build": "pnpm -C apps/web exec vite build",
-    "clean": "node scripts/clean.mjs apps/web/dist coverage .package .tsbuild .eslintcache",
+    "clean": "node scripts/clean.mjs apps/web/dist coverage test-results playwright-report .package .tsbuild .eslintcache",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",

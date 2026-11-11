@@ -28,7 +28,13 @@ pnpm test            # every test once
 pnpm test:coverage   # tests with the coverage thresholds enforced
 pnpm typecheck       # tsc -b over every workspace program
 pnpm build           # build apps/web into apps/web/dist
+pnpm e2e:browsers    # once per machine: install Playwright's Chromium
+pnpm test:e2e        # the Chromium boot smoke test against a fresh build
 ```
+
+`pnpm test:e2e` runs `pnpm run build` first, overwriting `apps/web/dist`, then serves it
+with `vite preview` on port 4173. Set `E2E_PORT` (an integer from 1 to 65535) to run it
+in two worktrees at once.
 
 Run one Vitest project with `pnpm exec vitest run --project core` (or `web`, `unit`,
 `automation`), or one file with `pnpm exec vitest run <path>`. CI and the pre-commit
