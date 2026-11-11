@@ -105,16 +105,19 @@ changing a scene. This skill holds the judgment they leave to the code.
 
 - `document.body.dataset.ready = "true"` is set when Title accepts input — not when Boot
   ends, and not before the first frame Title can be clicked.
+- `document.body.dataset.scene = "play"` is set at the end of Play's `create()`, once
+  its key listener exists, and deleted when Play is left (Back, Escape, or the finish
+  that goes to Result).
 - `#debug-moves` holds the integer move count as text. It is present in every build,
   `aria-hidden="true"` and visually hidden. Update it in the same place the on-canvas
   counter is updated, so the two cannot drift.
 - The boot smoke test (`tests/e2e/`, Playwright on Chromium against `vite preview` of
   the local build in `apps/web/dist`, port `E2E_PORT` (default 4173),
   `strictPort: true`) waits for `body[data-ready="true"]` within 10 s, fails on any
-  `console.error` or page error, then starts Practice, presses Enter once, and expects
-  `#debug-moves` to go from 0 to 1. Keep that path working when Title or Play changes,
-  or change the test in the same PR. An expected, handled failure logs `console.warn`,
-  never `console.error`.
+  `console.error` or page error, then starts Practice, waits for
+  `body[data-scene="play"]`, presses Enter once, and expects `#debug-moves` to go from 0
+  to 1. Keep that path working when Title or Play changes, or change the test in the
+  same PR. An expected, handled failure logs `console.warn`, never `console.error`.
 - `apps/web/src/main.ts` and `apps/web/src/scenes/**` have no unit coverage floor; the
   smoke test covers them. (`apps/web/src/platform/dom-loader.ts` is the third exclusion;
   `integrating-portals` owns it.) Logic worth testing moves into a pure helper outside

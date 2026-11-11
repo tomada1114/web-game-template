@@ -117,6 +117,7 @@ export class PlayScene extends Phaser.Scene {
 
     this.draw();
     this.platform.gameplayStart();
+    document.body.dataset["scene"] = "play";
   }
 
   private onKey(event: KeyboardEvent): void {
@@ -193,6 +194,7 @@ export class PlayScene extends Phaser.Scene {
   private finish(finished: core.State): void {
     if (this.leaving) return;
     this.leaving = true;
+    delete document.body.dataset["scene"];
     this.platform.gameplayStop();
     fadeTo(this, SceneKey.result, {
       seed: finished.seed,
@@ -206,6 +208,7 @@ export class PlayScene extends Phaser.Scene {
   private back(): void {
     if (this.leaving) return;
     this.leaving = true;
+    delete document.body.dataset["scene"];
     this.platform.gameplayStop();
     fadeTo(this, SceneKey.title);
   }
