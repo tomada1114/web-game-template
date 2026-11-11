@@ -105,21 +105,24 @@ Why the list looks the way it does:
   `pow`, `hypot` and the rest of that family
   (https://tc39.es/ecma262/multipage/numbers-and-dates.html, checked 2026-11-05). One
   differing last bit flips a comparison and the run diverges on that engine only. `**`
-  and `**=` are banned with `Math.pow`.
-- `Math.random`, `Date`, `performance`, `crypto`, and the timers give a different value
-  on every run; `Intl` and `localeCompare` depend on the locale; `window`, `document`
-  and `globalThis` reach the device. Each one becomes a parameter that `apps/web`
-  supplies. `localeCompare` is banned through `no-restricted-syntax`
-  (`CallExpression[callee.property.name='localeCompare']`), since it is a method, not a
-  global.
-- These `Math` functions are not on the forbidden list and stay allowed: `floor`, `abs`,
-  `min`, `max`, `imul`, `sqrt`, `trunc`, `sign`, `clz32`, `round`. Compare strings with
-  `<` on code units, not `localeCompare`.
+  and `**=` are banned with `Math.pow`; lint cannot tell a number operand from a bigint
+  one, so bigint exponentiation is banned too.
+- `Math.random`, `Date`, `performance`, `crypto`, the timers and `queueMicrotask` give a
+  different value or order on every run; `WeakRef`, `FinalizationRegistry`,
+  `SharedArrayBuffer` and `Atomics` depend on the garbage collector or on threads;
+  `Intl`, `localeCompare` and every `toLocale*` method depend on the locale; `window`,
+  `document` and `globalThis` reach the device. Each one becomes a parameter that
+  `apps/web` supplies. The locale methods are banned through `no-restricted-syntax` on
+  the member expression (dot or computed access), since they are methods, not globals.
+- `Math` is an allowlist: only `floor`, `abs`, `min`, `max`, `imul`, `sqrt`, `trunc`,
+  `sign`, `clz32` and `round` may be read, and `Math` itself may not be used as a value
+  (`const M = Math`, `Reflect.get(Math, …)`). Compare strings with `<` on code units,
+  not `localeCompare`.
 
 When the guard blocks something a rule needs, write it in integers — fixed-point
 arithmetic or a lookup table — rather than disabling the rule. An `eslint-disable` in
-core is a weakened gate (`AGENTS.md`); a change to the block itself goes through
-**REQUIRED:** `changing-gates`, and `tests/determinism-lint.test.ts` changes with it.
+core is a weakened gate (`CLAUDE.md`); a change to the block itself follows
+`.claude/rules/gates.md`, and `tests/determinism-lint.test.ts` changes with it.
 
 ## Golden and property tests
 
