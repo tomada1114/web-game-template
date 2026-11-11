@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -43,6 +43,10 @@ describe("this checkout's own bootstrap tooling", () => {
     const source = workflowSource("ci.yml");
     expect(source).not.toContain("  package-floor:");
     expect(source).not.toContain("# bootstrap-node-floor");
+  });
+
+  it("carries no .template-origin, which only a generated repository has", () => {
+    expect(existsSync(path.join(repoRoot, ".template-origin"))).toBe(false);
   });
 
   it("keeps the template's default Node floor explicit", () => {

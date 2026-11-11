@@ -31,6 +31,19 @@ real only after the preview passes `findPlaceholders` and `assertGeneratedAiLaye
   YAML). Anything else that exists only for the template is registered in
   `SELF_REMOVED_PATHS`.
 
+## What marks a generated repository
+
+- The bootstrap writes `.template-origin` (template URL, plus `commit` and `tree`, each
+  `unknown` outside a git work tree; `commit` also when the history is shallow or lacks
+  `TEMPLATE_ROOT_COMMIT`). Self-removal keeps it, and the template checkout never has
+  one (`tests/template-self.test.ts`). A successful run removes `scripts/bootstrap.mjs`,
+  so the refusal guards only a rerun of a script copied back in: while the file exists,
+  that run fails with `ERR_ALREADY_BOOTSTRAPPED` before any prompt and before writing
+  anything.
+- `CLAUDE.md`'s `## Product` holds four `TODO:` lines that the bootstrap leaves as they
+  are. `tests/product-section.test.ts` survives bootstrap: with `.template-origin` it
+  fails on each remaining `TODO:` line, and without it on a section with none.
+
 ## The dangling-reference check
 
 `assertGeneratedAiLayer` (`ERR_AI_LAYER_REFERENCE`) scans the generated tree's Markdown
@@ -57,7 +70,13 @@ that constant's comment asks for.
 ## Verifying a change
 
 1. `pnpm exec vitest run tests/bootstrap.test.ts` — fast, in-process.
-2. `pnpm bootstrap:e2e` — the real command as a subprocess on a throwaway copy; needed
-   when file copying, argument parsing, or a removal list changed.
-3. `pnpm bootstrap:check` before finishing — installs the generated repository and runs
-   its full gate. A failed workspace is kept at the reported path.
+2. `pnpm bootstrap:e2e` — the real command as a subprocess on a throwaway copy
+   (`space-tiles`, "Space Tiles"); needed when file copying, argument parsing, or a
+   removal list changed. `assertGenerated` also requires no `my-game` or `My Game`
+   outside `CHANGELOG.md`, `docs/product/` and `docs/design/`, the renamed
+   `apps/web/src/game-info.ts`, the unchanged Product placeholder, and
+   `.template-origin`.
+3. `pnpm bootstrap:check` before finishing — installs the generated repository, requires
+   `tests/product-section.test.ts` to fail, writes a fixture Product section, runs the
+   full gate, and requires `.package/space-tiles-0.0.0-crazygames.zip`. A failed
+   workspace is kept at the reported path.

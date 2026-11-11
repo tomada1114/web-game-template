@@ -6,15 +6,17 @@ portal. Development and CI run on Node >= 24 with pnpm 11 through Corepack; neve
 `devEngines.runtime`'s `onFail: error`. It is a pnpm workspace: `packages/core` holds
 the game rules, and `apps/web` builds them into a static site with Vite 8.
 
-The game side beyond that skeleton (seeded rules, scenes, portal adapter, release flow)
-is not built yet; its design decisions are the drafts under `docs/design/skill-drafts/`,
-with requirements in `docs/product/requirements.md`. Read the matching draft before
-implementing that part.
+Design decisions are the drafts under `docs/design/skill-drafts/`, requirements in
+`docs/product/requirements.md`; read the matching draft before implementing that part.
+File conventions live in `.claude/rules/`, procedures in `.claude/skills/`, and
+machine-enforceable rules in the configs: running the gate is how you learn them.
 
-This file holds what has to be true before the task is known. Conventions for a kind of
-file live in `.claude/rules/` and load when such a file is read; procedures live in
-`.claude/skills/`. Machine-enforceable rules live in the configs, and running the gate
-is how you learn them.
+## Product
+
+TODO: What this game is, in one paragraph.  
+TODO: Who it is for, and the core interaction.  
+TODO: Non-goals, copied verbatim from docs/product/requirements.md.  
+TODO: Where decisions live: docs/product/requirements.md and the skills.
 
 ## Commands
 
@@ -112,6 +114,6 @@ tests/             # repository-level tests
   runtime behavior, an error `code`, a setup step), not by which directory changed. When
   something observable moved, the `README.md` example and the affected `docs/` page
   change in the same pull request; otherwise say that no documentation change is needed.
-- Sub-agent tiers are named by role (`executor`, `architect`, `scout`, `worker`; defined
-  in `.claude/agents/`), never by model name or effort. Hand a step to a tier with
+- Sub-agent tiers are named by role (`executor`, `architect`, `scout`, `worker`; in
+  `.claude/agents/`), never by model name or effort. Hand a step to a tier with
   `subagent_type`, never a bare `model`, whose effort would come from the session.

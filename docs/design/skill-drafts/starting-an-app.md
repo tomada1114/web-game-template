@@ -3,10 +3,11 @@ name: starting-an-app
 description: >
   Use in a repository freshly cut from this game template, or when a kickoff hands one
   over: running the bootstrap (slug, --title, --author, --github-user, --license,
-  --description), tests/product-section.test.ts failing while AGENTS.md's ## Product
-  still has TODO: lines, the first design lock and tokens, removing the sample game in
-  packages/core/src/sample/ and the scenes' sample wiring, or the human-only setup:
-  branch ruleset, repository security settings, CrazyGames developer account.
+  --description), ERR_ALREADY_BOOTSTRAPPED, tests/product-section.test.ts failing while
+  CLAUDE.md's ## Product still has TODO: lines, the first design lock and tokens,
+  removing the sample game in packages/core/src/sample/ and the scenes' sample wiring,
+  or the human-only setup: branch ruleset, repository security settings, CrazyGames
+  developer account.
 ---
 
 # Starting an App
@@ -33,10 +34,13 @@ Do these in order. Each step leaves the repository in a state the next one assum
    renames the template's package scope, zip name, and daily salt to the slug; the
    `index.html` title, the Title scene, and the share text to the display name (both
    through `GAME_SLUG` and `GAME_TITLE` in `apps/web/src/game-info.ts`); and the README
-   and LICENSE holders. It keeps the sample game, writes `.template-origin` (which marks
-   the repository as generated), leaves `AGENTS.md`'s `## Product` as exactly these
-   placeholder lines (the template carries them), and removes itself and its tests — a
-   repository without the bootstrap script has already been bootstrapped.
+   and LICENSE holders. It keeps the sample game, writes `.template-origin` (the
+   template URL, the commit and tree it was cut from or `unknown`; it marks the
+   repository as generated and stays committed), leaves `CLAUDE.md`'s `## Product` as
+   exactly these placeholder lines (the template carries them), and removes itself and
+   its tests. Because it removes its own script, the refusal guards only a rerun of a
+   copy of `scripts/bootstrap.mjs` brought back: while `.template-origin` exists that
+   run fails with `ERR_ALREADY_BOOTSTRAPPED` and changes nothing.
 
    ```
    TODO: What this game is, in one paragraph.
@@ -50,7 +54,7 @@ Do these in order. Each step leaves the repository in a state the next one assum
    `TODO:` remains in `## Product`. Any other failure is a real problem to fix before
    going on.
 
-3. **Write `## Product`** in `AGENTS.md` from the game's signed-off requirements,
+3. **Write `## Product`** in `CLAUDE.md` from the game's signed-off requirements,
    replacing every `TODO:` line. `pnpm check:quick` is now green.
 
 4. **Design lock and tokens.** The game's own visual design stage replaces the sample's
@@ -96,9 +100,9 @@ and its tests; **REQUIRED:** `releasing-builds` for the PR lines.
 ## Human-only steps
 
 Commits, branch pushes and pull requests are within an authorized task's scope and need
-no separate request (`AGENTS.md` § Task scope and confirmations). These stay the
-owner's; prepare the concrete proposal, then ask, and list them for the owner when the
-repository is handed over:
+no separate request (`CLAUDE.md` § Security and human approval). These stay the owner's;
+prepare the concrete proposal, then ask, and list them for the owner when the repository
+is handed over:
 
 - Pushing a release tag (`releasing-builds`) and uploading a build to a portal.
 - A new dependency.
