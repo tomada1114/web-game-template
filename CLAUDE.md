@@ -27,7 +27,7 @@ pnpm fix           # ESLint autofix, then Prettier (pnpm format alone); never a 
 pnpm test          # every Vitest project once; pnpm test:related runs only the hook's subset
 pnpm budget        # fail when apps/web/dist is over the bundle budget (pnpm budget <dir>)
 pnpm package:crazygames # the portal build, then .package/<slug>-<version>-crazygames.zip
-pnpm dev           # Vite's dev server for apps/web; runs until stopped, as pnpm test:watch
+pnpm dev           # Vite's dev server for apps/web; runs until stopped
 pnpm e2e:browsers  # once per machine: install Playwright's Chromium
 pnpm test:e2e      # rebuild apps/web/dist, then the Chromium boot smoke (E2E_PORT, default 4173)
 pnpm check:staged  # the pre-commit secret check by hand; pnpm clean removes build output
@@ -54,7 +54,8 @@ Run the narrowest check that can fail, then the gate: `pnpm exec vitest run <pat
 `apps/web/src/main.ts`, `apps/web/src/scenes/`, `apps/web/index.html` or `tests/e2e/`;
 `pnpm build && pnpm budget` then `pnpm package:crazygames` for `apps/web/src/platform/`
 or the build config; `pnpm install` then `pnpm check` after a manifest; `pnpm fix` after
-Markdown. CI and the hooks call these same scripts and add no check of their own.
+Markdown; `pnpm test:watch` reruns tests until stopped. The hooks and CI run these same
+checks; CI adds typos, dependency review and gitleaks.
 
 ## Architecture
 
@@ -85,8 +86,7 @@ tests/             # repository-level tests
   needs an explicit request that names it, as a request to ship an issue does; a request
   for a pull request stops there. Outside such a task, each still needs a human.
 - **A release tag, a portal upload, a new dependency, the branch ruleset, and the
-  repository's security settings stay the owner's.** Prepare the concrete proposal, then
-  ask.
+  repository's security settings stay the owner's.** Propose concretely, then ask.
 - Nothing here mechanically blocks `--no-verify`, `LEFTHOOK=0`, a force-push, a release
   tag, or a portal upload; this rule does. Any bypass is ruled out, not one spelling.
 - Never read or write `.env*` (the `.example`, `.sample` and `.template` variants are

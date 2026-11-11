@@ -10,7 +10,8 @@ A short description.
 
 This is a GitHub template for small deterministic 2D browser games in TypeScript (Vite
 8, Phaser 4, the CrazyGames HTML5 SDK v3), built mostly by coding agents. A repository
-cut from it starts with a playable sample game and every gate green.
+cut from it starts with a playable sample game; once CLAUDE.md's `## Product` is
+written, every gate is green (the Product-section test fails until then).
 
 Create a repository with GitHub's **Use this template** button, then run the interactive
 bootstrap before installing dependencies:
