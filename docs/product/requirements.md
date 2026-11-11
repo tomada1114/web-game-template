@@ -127,6 +127,7 @@ product decision.
 | Input        | pointer (mouse and touch) and keyboard (arrow keys + Space/Enter to move a cursor and play)                                                                                                          |
 | Rendering    | shapes and text only (no image assets in the sample); tile colour plus glyph                                                                                                                         |
 | Ready signal | when the Title scene is interactive, set `document.body.dataset.ready = "true"` (used by the smoke test)                                                                                             |
+| Play signal  | while Play accepts keys, `document.body.dataset.scene = "play"`; deleted when the board ends or Play shuts down (used by the smoke test)                                                             |
 | Move mirror  | `#debug-moves` holds the integer move count as text; present in every build, `aria-hidden="true"`, visually hidden                                                                                   |
 | Body CSS     | `user-select: none` with vendor prefixes, `touch-action: none` on the canvas                                                                                                                         |
 
@@ -172,11 +173,11 @@ product decision.
 
 ### 3.9 Boot smoke test
 
-| Item       | Specification                                                                                                                                           |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Runner     | Playwright (Chromium) against `vite preview` of the `local` build on port 4173 with `strictPort: true`                                                  |
-| Assertions | `body[data-ready="true"]` within 10 s; no `console.error`/`pageerror`; starting Practice and pressing Enter once changes `#debug-moves` from `0` to `1` |
-| CI         | runs in the existing CI workflow as its own job                                                                                                         |
+| Item       | Specification                                                                                                                                                                                   |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Runner     | Playwright (Chromium) against `vite preview` of the `local` build on port 4173 with `strictPort: true`                                                                                          |
+| Assertions | `body[data-ready="true"]` within 10 s; no `console.error`/`pageerror`; starting Practice, waiting for `body[data-scene="play"]`, and pressing Enter once changes `#debug-moves` from `0` to `1` |
+| CI         | runs in the existing CI workflow as its own job                                                                                                                                                 |
 
 ### 3.10 Game bootstrap and agent harness
 

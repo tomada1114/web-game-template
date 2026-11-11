@@ -23,16 +23,13 @@ test("the built game boots, starts Practice, and plays one move", async ({ page 
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
 
-  // #debug-moves is visually hidden on purpose, so read its text only.
+  // Play sets body[data-scene="play"] once its key listener exists, so one
+  // press must count; #debug-moves is visually hidden, so read its text only.
+  await expect(page.locator('body[data-scene="play"]')).toBeAttached();
   const moves = page.locator("#debug-moves");
   await expect(moves).toHaveText("0");
-  // Play exposes no ready signal and Phaser drops a key pressed before its
-  // listener exists, so press again only while no move has landed: a second
-  // counted press reads "2" and still fails.
-  await expect(async () => {
-    if ((await moves.textContent()) === "0") await page.keyboard.press("Enter");
-    await expect(moves).toHaveText("1", { timeout: 1_000 });
-  }).toPass({ timeout: 10_000 });
+  await page.keyboard.press("Enter");
+  await expect(moves).toHaveText("1");
 
   baseExpect(errors).toEqual([]);
 });
