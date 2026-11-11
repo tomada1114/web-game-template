@@ -3,6 +3,8 @@ dist/
 .tsbuild/
 .package/
 coverage/
+test-results/
+playwright-report/
 node_modules/
 
 # Data under test, not source: a fixture is committed precisely because it is

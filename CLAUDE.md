@@ -27,6 +27,8 @@ pnpm typecheck     # tsc -b over every workspace program
 pnpm build         # build apps/web into apps/web/dist
 pnpm dev           # Vite's dev server for apps/web; runs until stopped
 pnpm repo:labels   # create/update GitHub labels from .github/labels.yml
+pnpm e2e:browsers  # once per machine: install Playwright's Chromium
+pnpm test:e2e      # rebuild apps/web/dist, then the Chromium boot smoke (E2E_PORT, default 4173)
 ```
 
 <!-- template-only:start -->

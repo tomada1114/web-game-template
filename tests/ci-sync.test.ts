@@ -47,22 +47,37 @@ function scriptSteps(name: string): string[] {
  * of `ci.yml`, from that job's header up to the next top-level job (or the
  * end of the file).
  */
-function ciJobSteps(jobName: string): string[] {
-  const text = readFileSync(
-    path.join(repoRoot, ".github", "workflows", "ci.yml"),
-    "utf8",
-  );
+function ciJobSteps(
+  jobName: string,
+  text = readFileSync(path.join(repoRoot, ".github", "workflows", "ci.yml"), "utf8"),
+): string[] {
   const jobStart = new RegExp(`^  ${jobName}:$`, "m").exec(text);
   if (jobStart === null) {
     throw new Error(`ci.yml has no top-level job named "${jobName}".`);
   }
   const rest = text.slice(jobStart.index + jobStart[0].length);
-  const nextJob = /^ {2}[a-z][a-z-]*:$/m.exec(rest);
+  const nextJob = /^ {2}[a-z][a-z0-9-]*:$/m.exec(rest);
   const body = nextJob === null ? rest : rest.slice(0, nextJob.index);
   return [...body.matchAll(/run:\s*pnpm run ([\w:-]+)/g)].map(
     (match) => match[1] ?? "",
   );
 }
+
+describe("ciJobSteps", () => {
+  it("ends a job's slice at the next job even when that job's name has a digit", () => {
+    const text = [
+      "jobs:",
+      "  test:",
+      "    steps:",
+      "      - run: pnpm run test:coverage",
+      "  e2e:",
+      "    steps:",
+      "      - run: pnpm run test:e2e",
+      "",
+    ].join("\n");
+    expect(ciJobSteps("test", text)).toEqual(["test:coverage"]);
+  });
+});
 
 describe("pnpm check stays in sync with ci.yml", () => {
   const sourceSteps = scriptSteps("check:source");

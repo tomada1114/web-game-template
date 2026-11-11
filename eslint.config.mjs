@@ -144,6 +144,8 @@ export default defineConfig([
     ".package/",
     ".tsbuild/",
     "coverage/",
+    "test-results/",
+    "playwright-report/",
     ".claude/worktrees/",
     "tests/fixtures/",
   ]),
