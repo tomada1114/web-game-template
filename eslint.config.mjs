@@ -53,6 +53,81 @@ const DOM_GLOBALS = [
   "alert",
 ];
 
+/**
+ * Globals whose value differs between runs, locales, or devices. `window` and
+ * `document` are already in DOM_GLOBALS, so they are not repeated here: a
+ * second entry would report the same reference twice.
+ */
+const NON_DETERMINISTIC_GLOBALS = [
+  "Date",
+  "performance",
+  "crypto",
+  "setTimeout",
+  "setInterval",
+  "clearTimeout",
+  "clearInterval",
+  "queueMicrotask",
+  "Intl",
+  "globalThis",
+  "WeakRef",
+  "FinalizationRegistry",
+  "SharedArrayBuffer",
+  "Atomics",
+];
+
+/** `Math` members ECMA-262 specifies exactly; every other member is reported. */
+const ALLOWED_MATH = [
+  "floor",
+  "abs",
+  "min",
+  "max",
+  "imul",
+  "sqrt",
+  "trunc",
+  "sign",
+  "clz32",
+  "round",
+];
+
+/**
+ * `Math` members that ECMA-262 §21.3.2 lets an engine approximate, plus
+ * `random`, each reported by `no-restricted-properties` with its own entry.
+ * A member in neither list is caught by the allowlist selector instead.
+ */
+const NON_DETERMINISTIC_MATH = [
+  "random",
+  "sin",
+  "cos",
+  "tan",
+  "asin",
+  "acos",
+  "atan",
+  "atan2",
+  "sinh",
+  "cosh",
+  "tanh",
+  "asinh",
+  "acosh",
+  "atanh",
+  "exp",
+  "expm1",
+  "log",
+  "log1p",
+  "log2",
+  "log10",
+  "pow",
+  "cbrt",
+  "hypot",
+];
+
+const KNOWN_MATH = `/^(${[...ALLOWED_MATH, ...NON_DETERMINISTIC_MATH].join("|")})$/`;
+
+/** Members that consult the locale through Intl. */
+const LOCALE_MEMBER = "/^(localeCompare$|toLocale)/";
+
+const DETERMINISM_MESSAGE =
+  "packages/core must replay identically on every engine: see docs/design/skill-drafts/writing-game-core.md. Pass the value in from apps/web, or write it in integers.";
+
 export default defineConfig([
   // Only generated trees are ignored; everything hand-written is linted,
   // including repository automation, config files, and `.claude/skills/`.
@@ -176,6 +251,52 @@ export default defineConfig([
           message:
             'packages/core runs without a DOM: see "Architecture" in CLAUDE.md. Read the value in apps/web and pass it in.',
         })),
+        ...NON_DETERMINISTIC_GLOBALS.map((name) => ({
+          name,
+          message: DETERMINISM_MESSAGE,
+        })),
+      ],
+      "no-restricted-properties": [
+        "error",
+        ...NON_DETERMINISTIC_MATH.map((property) => ({
+          object: "Math",
+          property,
+          message: DETERMINISM_MESSAGE,
+        })),
+      ],
+      // Options replace rather than merge across config objects, so the
+      // `export *` ban from source/explicit-exports is restated here.
+      "no-restricted-syntax": [
+        "error",
+        NO_EXPORT_STAR,
+        {
+          selector: `MemberExpression[computed=false][property.name=${LOCALE_MEMBER}]`,
+          message: `localeCompare and toLocale* depend on the locale; compare code units with < and format in apps/web. ${DETERMINISM_MESSAGE}`,
+        },
+        {
+          selector: `MemberExpression[computed=true][property.value=${LOCALE_MEMBER}]`,
+          message: `localeCompare and toLocale* depend on the locale; compare code units with < and format in apps/web. ${DETERMINISM_MESSAGE}`,
+        },
+        // The two Math selectors make ALLOWED_MATH an allowlist. Members on
+        // NON_DETERMINISTIC_MATH are excluded here only because
+        // no-restricted-properties already reports them.
+        {
+          selector: `MemberExpression[object.type='Identifier'][object.name='Math']:not([computed=false][property.name=${KNOWN_MATH}]):not([computed=true][property.value=${KNOWN_MATH}])`,
+          message: `Only Math.${ALLOWED_MATH.join(", Math.")} are exactly specified. ${DETERMINISM_MESSAGE}`,
+        },
+        {
+          selector:
+            "Identifier[name='Math']:not(MemberExpression > Identifier.object):not(MemberExpression[computed=false] > Identifier.property)",
+          message: `Use Math only as \`Math.<member>\`, so the member allowlist can see each access. ${DETERMINISM_MESSAGE}`,
+        },
+        {
+          selector: "BinaryExpression[operator='**']",
+          message: `\`**\` on numbers may be approximated by the engine, and lint cannot tell a number operand from a bigint; multiply explicitly. ${DETERMINISM_MESSAGE}`,
+        },
+        {
+          selector: "AssignmentExpression[operator='**=']",
+          message: `\`**=\` on numbers may be approximated by the engine, and lint cannot tell a number operand from a bigint; multiply explicitly. ${DETERMINISM_MESSAGE}`,
+        },
       ],
     },
   },
