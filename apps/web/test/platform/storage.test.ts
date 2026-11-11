@@ -89,4 +89,50 @@ describe("createGuardedStorage", () => {
       storage.removeItem("k");
     }).not.toThrow();
   });
+
+  it("keeps other localStorage keys readable and later writes durable after a QuotaExceededError", () => {
+    const backing = memoryStorage();
+    backing.setItem("demo:best:2026-11-04", "9");
+    let full = true;
+    vi.stubGlobal("localStorage", {
+      ...backing,
+      setItem: (key: string, value: string) => {
+        if (full) quotaExceeded();
+        backing.setItem(key, value);
+      },
+    });
+    const storage = createGuardedStorage();
+
+    storage.setItem("demo:best:2026-11-05", "14");
+    expect(storage.getItem("demo:best:2026-11-05")).toBe("14");
+    expect(storage.getItem("demo:best:2026-11-04")).toBe("9");
+
+    full = false;
+    storage.setItem("demo:best:2026-11-06", "3");
+    expect(backing.getItem("demo:best:2026-11-06")).toBe("3");
+    storage.setItem("demo:best:2026-11-05", "15");
+    expect(backing.getItem("demo:best:2026-11-05")).toBe("15");
+    expect(storage.getItem("demo:best:2026-11-05")).toBe("15");
+  });
+
+  it("removeItem clears both the memory overlay and localStorage", () => {
+    const backing = memoryStorage();
+    backing.setItem("k", "old");
+    let full = true;
+    vi.stubGlobal("localStorage", {
+      ...backing,
+      setItem: (key: string, value: string) => {
+        if (full) quotaExceeded();
+        backing.setItem(key, value);
+      },
+    });
+    const storage = createGuardedStorage();
+    storage.setItem("k", "new");
+    full = false;
+
+    storage.removeItem("k");
+
+    expect(storage.getItem("k")).toBeNull();
+    expect(backing.getItem("k")).toBeNull();
+  });
 });

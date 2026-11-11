@@ -38,14 +38,33 @@ export interface CrazyGamesPlatformOptions {
   readonly useDataModule?: boolean;
 }
 
+type LifecycleEvent =
+  "loadingStart" | "loadingStop" | "gameplayStart" | "gameplayStop" | "happytime";
+
+const LIFECYCLE_EVENTS: readonly LifecycleEvent[] = [
+  "loadingStart",
+  "loadingStop",
+  "gameplayStart",
+  "gameplayStop",
+  "happytime",
+];
+
+function isObject(value: unknown): value is object {
+  return typeof value === "object" && value !== null;
+}
+
 function isCrazyGamesGlobal(value: unknown): value is CrazyGamesGlobal {
-  if (typeof value !== "object" || value === null) return false;
+  if (!isObject(value)) return false;
   const sdk: unknown = Reflect.get(value, "SDK");
-  return (
-    typeof sdk === "object" &&
-    sdk !== null &&
-    typeof Reflect.get(sdk, "init") === "function"
-  );
+  if (!isObject(sdk) || typeof Reflect.get(sdk, "init") !== "function") return false;
+  const game: unknown = Reflect.get(sdk, "game");
+  if (!isObject(game)) return false;
+  if (
+    !LIFECYCLE_EVENTS.every((event) => typeof Reflect.get(game, event) === "function")
+  ) {
+    return false;
+  }
+  return isObject(Reflect.get(game, "settings"));
 }
 
 function readSdk(): CrazyGamesSdk {
@@ -65,7 +84,12 @@ function readSdk(): CrazyGamesSdk {
  * script fails, `SDK.init()` rejects, or the two do not settle within
  * {@link CRAZYGAMES_INIT_TIMEOUT_MS}, the platform stays local for the session
  * and logs exactly one `console.warn`; a late resolution does not switch back.
- * Until `init()` succeeds, every method behaves as the local platform.
+ * Until `init()` succeeds, every method behaves as the local platform; that
+ * includes `storage`, so a call made before `init()` settles uses the guarded
+ * local store (`main.ts` awaits `init()` before creating the game). After init,
+ * an SDK call that throws falls back to local for that call and logs one
+ * `console.warn` for the session; the first `SDK.data` throw moves `storage` to
+ * the guarded local store for the rest of the session.
  *
  * @param options - The script loader and the Data module switch.
  * @returns The CrazyGames platform.
@@ -74,11 +98,45 @@ export function createCrazyGamesPlatform(options: CrazyGamesPlatformOptions): Pl
   const local = createLocalPlatform();
   let sdk: CrazyGamesSdk | undefined;
   let initializing: Promise<void> | undefined;
+  let dataFailed = false;
+  let sdkCallWarned = false;
+
+  function warnSdkCall(error: unknown): void {
+    if (sdkCallWarned) return;
+    sdkCallWarned = true;
+    console.warn("CrazyGames SDK call failed; using local behaviour.", error);
+  }
+
+  function guarded<T>(onSdk: (active: CrazyGamesSdk) => T, onLocal: () => T): T {
+    if (sdk) {
+      try {
+        return onSdk(sdk);
+      } catch (error: unknown) {
+        warnSdkCall(error);
+      }
+    }
+    return onLocal();
+  }
+
+  function forward(event: LifecycleEvent): () => void {
+    return () => {
+      guarded(
+        (active) => {
+          active.game[event]();
+        },
+        () => {
+          local[event]();
+        },
+      );
+    };
+  }
 
   async function start(): Promise<void> {
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const abort = new AbortController();
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
+        abort.abort();
         reject(
           new Error(
             `SDK did not settle within ${String(CRAZYGAMES_INIT_TIMEOUT_MS)} ms`,
@@ -88,6 +146,8 @@ export function createCrazyGamesPlatform(options: CrazyGamesPlatformOptions): Pl
     });
     const ready = (async () => {
       await options.loadScript(CRAZYGAMES_SDK_URL);
+      // A script that loads after the timeout must not initialize an SDK nobody drives.
+      if (abort.signal.aborted) throw new Error("SDK script loaded after the timeout");
       const candidate = readSdk();
       await candidate.init();
       return candidate;
@@ -104,7 +164,7 @@ export function createCrazyGamesPlatform(options: CrazyGamesPlatformOptions): Pl
   }
 
   function dataModule(): KeyValueStore | undefined {
-    return options.useDataModule === true ? sdk?.data : undefined;
+    return options.useDataModule === true && !dataFailed ? sdk?.data : undefined;
   }
 
   function through<T>(onData: (data: KeyValueStore) => T, onLocal: () => T): T {
@@ -113,7 +173,8 @@ export function createCrazyGamesPlatform(options: CrazyGamesPlatformOptions): Pl
       try {
         return onData(data);
       } catch {
-        // Falls back to the guarded store, which never throws.
+        // Reading SDK.data after a failed write would return stale or missing data.
+        dataFailed = true;
       }
     }
     return onLocal();
@@ -152,27 +213,16 @@ export function createCrazyGamesPlatform(options: CrazyGamesPlatformOptions): Pl
       initializing ??= start();
       return initializing;
     },
-    loadingStart: () => {
-      if (sdk) sdk.game.loadingStart();
-      else local.loadingStart();
-    },
-    loadingStop: () => {
-      if (sdk) sdk.game.loadingStop();
-      else local.loadingStop();
-    },
-    gameplayStart: () => {
-      if (sdk) sdk.game.gameplayStart();
-      else local.gameplayStart();
-    },
-    gameplayStop: () => {
-      if (sdk) sdk.game.gameplayStop();
-      else local.gameplayStop();
-    },
-    happytime: () => {
-      if (sdk) sdk.game.happytime();
-      else local.happytime();
-    },
-    isMuted: () => sdk?.game.settings.muteAudio ?? false,
+    loadingStart: forward("loadingStart"),
+    loadingStop: forward("loadingStop"),
+    gameplayStart: forward("gameplayStart"),
+    gameplayStop: forward("gameplayStop"),
+    happytime: forward("happytime"),
+    isMuted: () =>
+      guarded(
+        (active) => active.game.settings.muteAudio,
+        () => local.isMuted(),
+      ),
     storage,
   };
 }

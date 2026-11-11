@@ -56,10 +56,10 @@ two scripts follow (`writing-repo-scripts`); wiring a script into `pnpm check` o
   for `window.CrazyGames` are written by hand and cover only the members used.
 - `crazygames.ts` takes the script loader as a parameter,
   `loadScript(url): Promise<void>`. The default, which inserts the `<script>` element,
-  lives in the tiny `apps/web/src/platform/dom-loader.ts`, which has no unit test and is
-  excluded from the `apps/web` coverage floor. Tests use no DOM-emulation dependency:
-  they pass a fake loader and stub `window.CrazyGames` and `localStorage` with
-  `vi.stubGlobal`.
+  lives in the tiny `apps/web/src/platform/dom-loader.ts`, which counts toward the
+  `apps/web` coverage floor like any other file; its unit test passes a stubbed
+  `document` through `vi.stubGlobal`. Tests use no DOM-emulation dependency: they pass a
+  fake loader and stub `window.CrazyGames` and `localStorage` with `vi.stubGlobal`.
 - Events forward to `SDK.game.loadingStart/Stop`, `gameplayStart/Stop`, and
   `happytime()`. Stop gameplay at every break, not on tab blur; the first
   `gameplayStart` marks the end of the initial download; call `happytime()` sparingly.

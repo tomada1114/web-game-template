@@ -212,6 +212,83 @@ describe("createCrazyGamesPlatform", () => {
     }
   });
 
+  it("never calls SDK.init() when the script loads after the timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const warn = quietWarn();
+      quietDebug();
+      const sdk = fakeSdk();
+      vi.stubGlobal("CrazyGames", { SDK: sdk });
+      const platform = createCrazyGamesPlatform({
+        loadScript: () =>
+          new Promise((resolve) => {
+            setTimeout(resolve, 12_000);
+          }),
+      });
+
+      const done = platform.init();
+      await vi.advanceTimersByTimeAsync(10_000);
+      await done;
+      await vi.advanceTimersByTimeAsync(5_000);
+      platform.gameplayStart();
+
+      expect(sdk.init).not.toHaveBeenCalled();
+      expect(sdk.game.gameplayStart).not.toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("falls back with one console.warn when the global has init but no game", async () => {
+    const warn = quietWarn();
+    quietDebug();
+    const init = vi.fn(() => Promise.resolve());
+    vi.stubGlobal("CrazyGames", { SDK: { init } });
+    const platform = createCrazyGamesPlatform({ loadScript: () => Promise.resolve() });
+
+    await platform.init();
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(init).not.toHaveBeenCalled();
+    expect(() => {
+      platform.gameplayStart();
+    }).not.toThrow();
+    expect(platform.isMuted()).toBe(false);
+  });
+
+  it("falls back to local with one console.warn when SDK lifecycle calls throw", async () => {
+    const warn = quietWarn();
+    quietDebug();
+    const sdk = fakeSdk();
+    const fail = () => {
+      throw new Error("sdk");
+    };
+    for (const event of [
+      sdk.game.loadingStart,
+      sdk.game.loadingStop,
+      sdk.game.gameplayStart,
+      sdk.game.gameplayStop,
+      sdk.game.happytime,
+    ]) {
+      event.mockImplementation(fail);
+    }
+    Object.defineProperty(sdk.game.settings, "muteAudio", { get: fail });
+    vi.stubGlobal("CrazyGames", { SDK: sdk });
+    const platform = createCrazyGamesPlatform({ loadScript: () => Promise.resolve() });
+    await platform.init();
+
+    expect(() => {
+      platform.loadingStart();
+      platform.loadingStop();
+      platform.gameplayStart();
+      platform.gameplayStop();
+      platform.happytime();
+    }).not.toThrow();
+    expect(platform.isMuted()).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
   describe("storage", () => {
     it("uses SDK.data when the Data module is enabled and the SDK is up", async () => {
       const backing = { getItem: vi.fn(), setItem: vi.fn(), removeItem: vi.fn() };
@@ -299,5 +376,37 @@ describe("createCrazyGamesPlatform", () => {
       platform.storage.removeItem("k");
       expect(platform.storage.getItem("k")).toBeNull();
     });
+  });
+
+  it("stays on the guarded local store after the first SDK.data throw", async () => {
+    const backing = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) => backing.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        backing.set(key, value);
+      },
+      removeItem: (key: string) => {
+        backing.delete(key);
+      },
+    });
+    const sdk = fakeSdk();
+    sdk.data.setItem.mockImplementationOnce(() => {
+      throw new Error("data module");
+    });
+    vi.stubGlobal("CrazyGames", { SDK: sdk });
+    const platform = createCrazyGamesPlatform({
+      loadScript: () => Promise.resolve(),
+      useDataModule: true,
+    });
+    await platform.init();
+
+    platform.storage.setItem("k", "v");
+    platform.storage.setItem("j", "w");
+
+    expect(platform.storage.getItem("k")).toBe("v");
+    expect(platform.storage.getItem("j")).toBe("w");
+    expect(sdk.data.setItem).toHaveBeenCalledTimes(1);
+    expect(sdk.data.getItem).not.toHaveBeenCalled();
+    expect(backing.get("j")).toBe("w");
   });
 });
