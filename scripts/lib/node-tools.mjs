@@ -117,7 +117,7 @@ export function resolveDependencyBin(packageName, binName, packageDir = repoRoot
   if (!existsSync(manifestPath)) {
     throw new Error(
       `ERR_DEPENDENCY_MISSING: ${packageName} is not installed.\n` +
-        `Expected: node_modules/${packageName}/package.json\n` +
+        `Expected: ${path.relative(repoRoot, manifestPath).split(path.sep).join("/")}\n` +
         "Next: run `pnpm install --frozen-lockfile`.",
     );
   }

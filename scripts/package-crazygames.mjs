@@ -12,7 +12,7 @@ import path from "node:path";
 import process from "node:process";
 import { crc32, deflateRawSync, inflateRawSync } from "node:zlib";
 
-import { listFiles, main as checkBudget } from "./check-budget.mjs";
+import { checkBudget, listFiles } from "./lib/budget.mjs";
 import { isMain } from "./lib/is-main.mjs";
 import { parseJson, readString } from "./lib/json.mjs";
 import { repoRoot, resolveDependencyBin, runNode } from "./lib/node-tools.mjs";
@@ -344,7 +344,7 @@ export function main(argv = [], root = repoRoot) {
   if (!buildPortal(root)) {
     return 1;
   }
-  const budget = checkBudget([BUILD_DIRECTORY], root);
+  const budget = checkBudget(BUILD_DIRECTORY, root);
   if (budget !== 0) {
     return budget;
   }

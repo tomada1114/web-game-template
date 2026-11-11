@@ -152,6 +152,19 @@ describe("resolveDependencyBin", () => {
     );
   });
 
+  it("names the path it looked for, relative to the repository root", () => {
+    expect(() => resolveDependencyBin("also-not-installed")).toThrow(
+      /^Expected: node_modules\/also-not-installed\/package\.json$/m,
+    );
+    expect(() =>
+      resolveDependencyBin(
+        "also-not-installed",
+        undefined,
+        path.join(repoRoot, "apps"),
+      ),
+    ).toThrow(/^Expected: apps\/node_modules\/also-not-installed\/package\.json$/m);
+  });
+
   it("resolves a string bin field directly, ignoring binName", () => {
     // prettier declares "bin": "./bin/prettier.cjs" — a string, not an object.
     expect(resolveDependencyBin("prettier", "anything")).toBe(

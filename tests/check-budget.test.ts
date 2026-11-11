@@ -7,17 +7,17 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 
+import { main } from "../scripts/check-budget.mjs";
 import {
   BUDGET_MAX_BYTES,
   BUDGET_MAX_FILES,
   listFiles,
-  main,
-} from "../scripts/check-budget.mjs";
+} from "../scripts/lib/budget.mjs";
 
 // Every tree measured here is built in a fresh temporary directory, never the
 // real apps/web/dist: the result must not depend on what this checkout last
-// built. scripts/check-budget.mjs imports `console` from "node:console", so
-// the spies target that module — see tests/clean.test.ts.
+// built. The scripts import `console` from "node:console", so the spies
+// target that module — see tests/clean.test.ts.
 
 const workspaces: string[] = [];
 let stdout: MockInstance<typeof consoleModule.log>;
