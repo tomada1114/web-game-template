@@ -44,6 +44,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:related": "vitest related --run",
+    "test:e2e": "playwright test",
+    "e2e:browsers": "playwright install --with-deps chromium",
     "repo:labels": "node scripts/sync-labels.mjs",
     "check:staged": "node scripts/check-staged.mjs",
     "check:quick": "pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test",
@@ -58,6 +60,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
     "@types/node": "^24.19.0",
     "@vitest/coverage-v8": "^4.1.11",
     "@vitest/eslint-plugin": "^1.6.27",
