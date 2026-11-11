@@ -152,6 +152,23 @@ describe("resolveDependencyBin", () => {
     );
   });
 
+  it("names the path it looked for, relative to the directory it searched", () => {
+    expect(() => resolveDependencyBin("also-not-installed")).toThrow(
+      /^Expected: node_modules\/also-not-installed\/package\.json$/m,
+    );
+    expect(() =>
+      resolveDependencyBin(
+        "also-not-installed",
+        undefined,
+        path.join(repoRoot, "apps"),
+      ),
+    ).toThrow(/^Expected: node_modules\/also-not-installed\/package\.json$/m);
+    // A directory outside the repository is named without a ../ chain.
+    expect(() =>
+      resolveDependencyBin("also-not-installed", undefined, makeWorkspace("bin-")),
+    ).toThrow(/^Expected: node_modules\/also-not-installed\/package\.json$/m);
+  });
+
   it("resolves a string bin field directly, ignoring binName", () => {
     // prettier declares "bin": "./bin/prettier.cjs" — a string, not an object.
     expect(resolveDependencyBin("prettier", "anything")).toBe(
@@ -170,6 +187,15 @@ describe("resolveDependencyBin", () => {
     // eslint's only bin entry is keyed by its own package name.
     expect(resolveDependencyBin("eslint")).toBe(
       path.join(repoRoot, "node_modules", "eslint", "bin", "eslint.js"),
+    );
+  });
+
+  it("resolves a workspace package's own dependency from that package", () => {
+    // vite is a dependency of apps/web, so pnpm links it under
+    // apps/web/node_modules rather than the root's.
+    const webDir = path.join(repoRoot, "apps", "web");
+    expect(resolveDependencyBin("vite", undefined, webDir)).toBe(
+      path.join(webDir, "node_modules", "vite", "bin", "vite.js"),
     );
   });
 

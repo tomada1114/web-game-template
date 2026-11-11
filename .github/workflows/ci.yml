@@ -57,6 +57,13 @@ jobs:
       - name: Build
         run: pnpm run build
 
+      # Measures the apps/web/dist the build step above just wrote.
+      - name: Check the bundle budget
+        run: pnpm run budget
+
+      - name: Package for CrazyGames
+        run: pnpm run package:crazygames
+
   test:
     name: Test (${{ matrix.os }})
     strategy:
