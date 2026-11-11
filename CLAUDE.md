@@ -1,15 +1,13 @@
 # Project Guide
 
-A template for a TypeScript browser game, worked on with Claude Code. Nothing here is
-published to npm: to publish means pushing a release tag or uploading a build to a game
-portal. Development and CI run on Node >= 24 with pnpm 11 through Corepack; never relax
-`devEngines.runtime`'s `onFail: error`. It is a pnpm workspace: `packages/core` holds
-the game rules, and `apps/web` builds them into a static site with Vite 8.
+A template for a TypeScript browser game, worked on with Claude Code; nothing is
+published to npm (publishing is a release tag or a portal upload). Development and CI
+run on Node >= 24, pnpm 11 via Corepack; never relax `devEngines.runtime`'s
+`onFail: error`.
 
-Design decisions are the drafts under `docs/design/skill-drafts/`, requirements in
-`docs/product/requirements.md`; read the matching draft before implementing that part.
-File conventions live in `.claude/rules/`, procedures in `.claude/skills/`, and
-machine-enforceable rules in the configs: running the gate is how you learn them.
+Design decisions and procedures live in the skills under `.claude/skills/` (load the
+matching one first), requirements in `docs/product/requirements.md`, file conventions in
+`.claude/rules/`, and machine-enforceable rules in the configs, which the gate runs.
 
 ## Product
 
@@ -21,16 +19,19 @@ TODO: Where decisions live: docs/product/requirements.md and the skills.
 ## Commands
 
 ```sh
+pnpm hooks:install # once per clone: lefthook's git hooks, which carry the secret gate
 pnpm check:quick   # format check, lint, typecheck, tests — the everyday gate
-pnpm check         # the full gate: the checks above with coverage, then the build
-pnpm fix           # ESLint autofix, then Prettier
-pnpm test:coverage # tests with the coverage thresholds enforced
-pnpm typecheck     # tsc -b over every workspace program
-pnpm build         # build apps/web into apps/web/dist
-pnpm dev           # Vite's dev server for apps/web; runs until stopped
-pnpm repo:labels   # create/update GitHub labels from .github/labels.yml
+pnpm check         # the full gate: pnpm check:source, pnpm budget, pnpm package:crazygames
+pnpm check:source  # pnpm format:check, pnpm lint, pnpm typecheck, pnpm test:coverage, pnpm build
+pnpm fix           # ESLint autofix, then Prettier (pnpm format alone); never a proof
+pnpm test          # every Vitest project once; pnpm test:related runs only the hook's subset
+pnpm budget        # fail when apps/web/dist is over the bundle budget (pnpm budget <dir>)
+pnpm package:crazygames # the portal build, then .package/<slug>-<version>-crazygames.zip
+pnpm dev           # Vite's dev server for apps/web; runs until stopped, as pnpm test:watch
 pnpm e2e:browsers  # once per machine: install Playwright's Chromium
 pnpm test:e2e      # rebuild apps/web/dist, then the Chromium boot smoke (E2E_PORT, default 4173)
+pnpm check:staged  # the pre-commit secret check by hand; pnpm clean removes build output
+pnpm repo:labels   # create/update GitHub labels from .github/labels.yml
 ```
 
 <!-- template-only:start -->
@@ -45,12 +46,15 @@ This checkout is the template itself. The bootstrap flow removes itself, this bl
 
 <!-- template-only:end -->
 
-Run the narrowest check that can fail, then the gate: one Vitest project with
-`pnpm exec vitest run --project core` (or `web`, `unit`, `automation`) or one file with
-`pnpm exec vitest run <path>`; `pnpm typecheck` then `pnpm build` for the web entry or
-`apps/web/index.html`; `pnpm install` then `pnpm check` after a `package.json` or
-`pnpm-workspace.yaml`; `pnpm fix` after Markdown. There are no per-package test scripts.
-CI and the pre-commit hook call these same scripts and define no check of their own.
+Run the narrowest check that can fail, then the gate: `pnpm exec vitest run <path>` or
+`--project core` (or `web`, `unit`, `automation`), such as
+`tests/determinism-lint.test.ts` then `pnpm lint` for the core determinism block, or
+`apps/web/test/theme/contrast-pairs.test.ts` for `apps/web/src/theme/tokens.ts` or
+`docs/design/contrast-pairs.json`; `pnpm typecheck` then `pnpm test:e2e` for
+`apps/web/src/main.ts`, `apps/web/src/scenes/`, `apps/web/index.html` or `tests/e2e/`;
+`pnpm build && pnpm budget` then `pnpm package:crazygames` for `apps/web/src/platform/`
+or the build config; `pnpm install` then `pnpm check` after a manifest; `pnpm fix` after
+Markdown. CI and the hooks call these same scripts and add no check of their own.
 
 ## Architecture
 
@@ -76,17 +80,15 @@ tests/             # repository-level tests
 
 ## Security and human approval
 
-- **Inside a task a human explicitly authorized, commits, branch pushes, and pull
-  requests need no separate request.** An explicit `shipping-issues` request is such a
-  task. Merging is covered only by an explicit request that names it, as a request to
-  ship an issue does; a request for a pull request stops there. Outside such a task,
-  each of them still needs a human.
+- **Inside a task a human explicitly authorized (an explicit `shipping-issues` request
+  is one), commits, branch pushes, and pull requests need no separate request.** Merging
+  needs an explicit request that names it, as a request to ship an issue does; a request
+  for a pull request stops there. Outside such a task, each still needs a human.
 - **A release tag, a portal upload, a new dependency, the branch ruleset, and the
   repository's security settings stay the owner's.** Prepare the concrete proposal, then
   ask.
-- Nothing in this repository blocks `--no-verify`, `LEFTHOOK=0`, a force-push, a release
-  tag, or a portal upload mechanically; this instruction is the rule. Reaching for a
-  bypass is what is ruled out, not one spelling of it.
+- Nothing here mechanically blocks `--no-verify`, `LEFTHOOK=0`, a force-push, a release
+  tag, or a portal upload; this rule does. Any bypass is ruled out, not one spelling.
 - Never read or write `.env*` (the `.example`, `.sample` and `.template` variants are
   fine) or anything under `secrets/`, and never write a credential into a tracked file.
   The pre-commit hook inspects only what is staged, so a shell read is not caught.
@@ -98,9 +100,8 @@ tests/             # repository-level tests
   added to `coverage.exclude` to move a number, no deleted security workflow, no removed
   `--frozen-lockfile`, no removed or relaxed ESLint rule or `pnpm-workspace.yaml`
   supply-chain setting, no `@ts-ignore`, no blanket `eslint-disable`, no skipped or
-  deleted test. If a gate is wrong, say so and let a human decide. This rule lives here
-  because the agent it must reach has classified its task as "make CI green" and loads
-  nothing else.
+  deleted test. If a gate is wrong, say so and let a human decide. It lives here because
+  an agent that sees only "make CI green" loads nothing else.
 
 ## Conventions
 
@@ -111,9 +112,8 @@ tests/             # repository-level tests
 - Do what was asked; nothing more. Prefer editing an existing file to creating one. Note
   improvements outside the current scope instead of making them.
 - Documentation impact is decided by what a user can observe (a signature, a default, a
-  runtime behavior, an error `code`, a setup step), not by which directory changed. When
-  something observable moved, the `README.md` example and the affected `docs/` page
-  change in the same pull request; otherwise say that no documentation change is needed.
-- Sub-agent tiers are named by role (`executor`, `architect`, `scout`, `worker`; in
-  `.claude/agents/`), never by model name or effort. Hand a step to a tier with
-  `subagent_type`, never a bare `model`, whose effort would come from the session.
+  runtime behavior, an error `code`, a setup step). When one moved, `README.md` and the
+  affected `docs/` page change in the same pull request; otherwise say none is needed.
+- Sub-agent tiers (`.claude/agents/`) are named by role, never by model or effort. Hand
+  a step to one with `subagent_type`, never a bare `model`, whose effort is the
+  session's.

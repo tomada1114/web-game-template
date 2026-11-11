@@ -135,3 +135,62 @@ describe("the Product-section check on fixture trees", () => {
     ]);
   });
 });
+
+// Only pnpm's own commands may appear in CLAUDE.md's Commands blocks without a
+// script behind them; any other name there is a command an agent would run and
+// watch fail.
+const PNPM_BUILT_INS = new Set(["install", "exec"]);
+
+function commandsSectionScripts(memory: string): string[] {
+  const start = memory.indexOf("\n## Commands\n");
+  if (start === -1) {
+    return [];
+  }
+  const rest = memory.slice(start + 1);
+  const next = rest.indexOf("\n## ", 1);
+  const section = next === -1 ? rest : rest.slice(0, next);
+  const names: string[] = [];
+  for (const block of section.matchAll(/^```[^\n]*\n([\s\S]*?)^```/gm)) {
+    for (const match of (block[1] ?? "").matchAll(/\bpnpm ([a-z][\w:-]*)/g)) {
+      const name = match[1] ?? "";
+      if (!PNPM_BUILT_INS.has(name)) {
+        names.push(name);
+      }
+    }
+  }
+  return names;
+}
+
+describe(`${MEMORY_FILE} ## Commands`, () => {
+  it("names only scripts that package.json defines", () => {
+    const memory = readFileSync(path.join(repoRoot, MEMORY_FILE), "utf8");
+    const manifest = JSON.parse(
+      readFileSync(path.join(repoRoot, "package.json"), "utf8"),
+    ) as { scripts?: Record<string, string> };
+    const scripts = new Set(Object.keys(manifest.scripts ?? {}));
+    const named = commandsSectionScripts(memory);
+
+    expect(named.length).toBeGreaterThan(0);
+    expect(named.filter((name) => !scripts.has(name))).toEqual([]);
+  });
+
+  it("skips pnpm's own install and exec", () => {
+    const memory = [
+      "## Commands",
+      "",
+      "```sh",
+      "pnpm install --frozen-lockfile",
+      "pnpm exec vitest run",
+      "pnpm budget",
+      "```",
+      "",
+      "## Architecture",
+      "",
+      "```sh",
+      "pnpm outside-the-section",
+      "```",
+      "",
+    ].join("\n");
+    expect(commandsSectionScripts(`# Guide\n\n${memory}`)).toEqual(["budget"]);
+  });
+});
