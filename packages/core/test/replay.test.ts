@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ConfigMismatchError,
   InvalidMoveError,
   RULES_VERSION,
   RulesVersionError,
@@ -15,6 +16,20 @@ import { thrownBy } from "./thrown-by.js";
 
 function recordOf(cells: readonly number[], seed = 1): ReplayRecord {
   return { v: 1, seed, config: SAMPLE_CONFIG, moves: cells.map((cell) => ({ cell })) };
+}
+
+// The ten cells seed 1 scrambles its board with.
+const SOLVING_CELLS = [5, 19, 14, 13, 19, 10, 24, 0, 16, 11];
+
+// A record arrives as JSON, so a test builds one the same way, config of any shape.
+function parsedRecord(config: unknown, cells: readonly number[] = []): ReplayRecord {
+  const json = JSON.stringify({
+    v: 1,
+    seed: 1,
+    config,
+    moves: cells.map((cell) => ({ cell })),
+  });
+  return JSON.parse(json) as ReplayRecord;
 }
 
 describe("replay", () => {
@@ -33,26 +48,20 @@ describe("replay", () => {
   });
 
   it("scores a solved run", () => {
-    // The ten cells seed 1 scrambles its board with.
-    const result = replay(recordOf([5, 19, 14, 13, 19, 10, 24, 0, 16, 11]));
+    const result = replay(recordOf(SOLVING_CELLS));
 
     expect(result.state.cells).toEqual(Array.from({ length: 25 }, () => 0));
     expect(result.score).toBe(11);
   });
 
-  it("creates the game from the record's seed and config", () => {
-    const record: ReplayRecord = {
-      v: 1,
-      seed: 77,
-      config: { ...SAMPLE_CONFIG, moveLimit: 25, scrambleMin: 4, scrambleMax: 8 },
-      moves: [],
-    };
+  it("creates the game from the record's seed", () => {
+    const record: ReplayRecord = { v: 1, seed: 77, config: SAMPLE_CONFIG, moves: [] };
 
-    expect(replay(record).state).toStrictEqual(createGame(77, record.config));
-    expect(replay(record).state.limit).toBe(25);
+    expect(replay(record).state).toStrictEqual(createGame(77, SAMPLE_CONFIG));
+    expect(replay(record).state.limit).toBe(20);
   });
 
-  it("throws a RangeError for a config createGame rejects", () => {
+  it("throws ERR_CONFIG_MISMATCH for a config createGame rejects", () => {
     const record: ReplayRecord = {
       v: 1,
       seed: 1,
@@ -60,7 +69,87 @@ describe("replay", () => {
       moves: [],
     };
 
-    expect(thrownBy(() => replay(record))).toBeInstanceOf(RangeError);
+    expect(thrownBy(() => replay(record))).toBeInstanceOf(ConfigMismatchError);
+  });
+
+  it("throws ERR_CONFIG_MISMATCH for a record that sets its own move limit", () => {
+    const error = thrownBy(() =>
+      replay({
+        ...recordOf(SOLVING_CELLS),
+        config: { ...SAMPLE_CONFIG, moveLimit: 1_000_000 },
+      }),
+    );
+
+    expect(error).toBeInstanceOf(ConfigMismatchError);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({
+      name: "ConfigMismatchError",
+      code: "ERR_CONFIG_MISMATCH",
+    });
+  });
+
+  it.each([
+    { size: 6 },
+    { kinds: 3 },
+    { moveLimit: 21 },
+    { moveLimit: 19 },
+    { scrambleMin: 5 },
+    { scrambleMax: 11 },
+  ])("throws ERR_CONFIG_MISMATCH for a config with %o", (change) => {
+    const error = thrownBy(() => replay(parsedRecord({ ...SAMPLE_CONFIG, ...change })));
+
+    expect(error).toBeInstanceOf(ConfigMismatchError);
+  });
+
+  const withoutScrambleMax = Object.fromEntries(
+    Object.entries(SAMPLE_CONFIG).filter(([key]) => key !== "scrambleMax"),
+  );
+
+  it.each([
+    ["missing", undefined],
+    ["null", null],
+    ["a string", "sample"],
+    ["an array", []],
+    ["an empty object", {}],
+    ["a field of another type", { ...SAMPLE_CONFIG, moveLimit: "20" }],
+    ["a missing field", withoutScrambleMax],
+  ])("throws ERR_CONFIG_MISMATCH for a config that is %s", (_name, config) => {
+    const error = thrownBy(() => replay(parsedRecord(config)));
+
+    expect(error).toBeInstanceOf(ConfigMismatchError);
+  });
+
+  it("accepts a config equal by value to SAMPLE_CONFIG", () => {
+    const spread = replay({ ...recordOf(SOLVING_CELLS), config: { ...SAMPLE_CONFIG } });
+    const parsed = replay(parsedRecord(SAMPLE_CONFIG, SOLVING_CELLS));
+
+    for (const result of [spread, parsed]) {
+      expect(result.score).toBe(11);
+      expect(result.state.limit).toBe(20);
+    }
+  });
+
+  it("ignores a config key SAMPLE_CONFIG does not have", () => {
+    const result = replay(
+      parsedRecord({ ...SAMPLE_CONFIG, bonus: 1000 }, SOLVING_CELLS),
+    );
+
+    expect(result.score).toBe(11);
+    expect(result.state.limit).toBe(20);
+  });
+
+  it("checks the version before the config", () => {
+    const record = parsedRecord({ ...SAMPLE_CONFIG, moveLimit: 1_000_000 });
+
+    expect(thrownBy(() => replay({ ...record, v: 2 }))).toBeInstanceOf(
+      RulesVersionError,
+    );
+  });
+
+  it("checks the config before the moves", () => {
+    const record = parsedRecord({ ...SAMPLE_CONFIG, moveLimit: 1_000_000 }, [25]);
+
+    expect(thrownBy(() => replay(record))).toBeInstanceOf(ConfigMismatchError);
   });
 
   it("leaves the record unchanged", () => {
