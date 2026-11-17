@@ -192,7 +192,7 @@ describe("main", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it("treats unparseable or failing `--version` output as a mismatch", () => {
+  it("treats unparsable or failing `--version` output as a mismatch", () => {
     for (const version of [
       ok("something else"),
       { status: 1, stdout: "typos-cli 9.8.7", errorCode: undefined },
