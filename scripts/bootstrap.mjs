@@ -42,6 +42,11 @@ const PLACEHOLDERS = [
   TEMPLATE_EMAIL,
   TEMPLATE_DESCRIPTION,
 ];
+// The workspace scope a module names when it imports a workspace package, and
+// the roots findPlaceholders walks for such a module that has no
+// PLACEHOLDER_TARGETS entry.
+const WORKSPACE_SCOPE = `@${TEMPLATE_PACKAGE}/`;
+const WORKSPACE_MODULE_ROOTS = ["apps", "packages"];
 // Both values are substituted into `export const GAME_SLUG = "<slug>";` and
 // `export const GAME_TITLE = "<title>";` in apps/web/src/game-info.ts, and the
 // HTML-escaped title into `    <title>…</title>` in apps/web/index.html. Past
@@ -84,6 +89,9 @@ Release pull requests update this file as part of the reviewed release process.
 // `pnpm-lock.yaml` records each workspace dependency under its package name,
 // so a frozen install in the generated repository fails unless it is renamed
 // along with the manifests.
+// findPlaceholders fails the bootstrap with ERR_PLACEHOLDER_REMAINING on a
+// `.ts` module under apps/ or packages/ that names the `@my-game/` scope
+// without an entry here, naming the file to add.
 const PLACEHOLDER_TARGETS = [
   { file: ".github/ISSUE_TEMPLATE/config.yml", placeholder: TEMPLATE_REPOSITORY },
   { file: "CONTRIBUTING.md", placeholder: TEMPLATE_PACKAGE },
@@ -611,6 +619,41 @@ function listMarkdownFiles(root) {
   };
   visit(root);
   return found;
+}
+
+/**
+ * List every non-symlink `.ts` file under the workspace module roots, skipping
+ * `node_modules` at any depth. A root that does not exist contributes nothing.
+ *
+ * @param {string} root
+ * @returns {string[]} Sorted repository-relative, forward-slash-separated paths.
+ */
+function listWorkspaceModules(root) {
+  /** @type {string[]} */
+  const found = [];
+  /** @param {string} directory */
+  const visit = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      if (entry.isSymbolicLink()) {
+        continue;
+      }
+      const absolute = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== "node_modules") {
+          visit(absolute);
+        }
+      } else if (entry.isFile() && entry.name.endsWith(".ts")) {
+        found.push(normalizeRelativePath(path.relative(root, absolute)));
+      }
+    }
+  };
+  for (const moduleRoot of WORKSPACE_MODULE_ROOTS) {
+    const absolute = path.join(root, moduleRoot);
+    if (existsSync(absolute) && lstatSync(absolute).isDirectory()) {
+      visit(absolute);
+    }
+  }
+  return found.sort();
 }
 
 /**
@@ -1179,7 +1222,9 @@ function assertTemplate(root) {
 }
 
 /**
- * Find any placeholder remaining in the explicit generated targets.
+ * Find any placeholder remaining in the explicit generated targets, and any
+ * `.ts` module under `apps/` or `packages/` that is not a target but still
+ * names the template's workspace scope (reported as `<path>: my-game`).
  *
  * @param {string} root
  * @param {Map<string, string | null>} [preview]
@@ -1218,6 +1263,15 @@ export function findPlaceholders(root, preview) {
       }
     }
   }
+  for (const relative of listWorkspaceModules(root)) {
+    if (targets.has(relative)) {
+      continue;
+    }
+    const text = resolveGeneratedText(root, relative, preview);
+    if (text?.includes(WORKSPACE_SCOPE)) {
+      found.push(`${relative}: ${TEMPLATE_PACKAGE}`);
+    }
+  }
   return found;
 }
 
@@ -1251,7 +1305,8 @@ export function bootstrap(
   if (placeholders.length > 0) {
     throw new BootstrapError(
       "ERR_PLACEHOLDER_REMAINING",
-      `generated repository still contains placeholders:\n${placeholders.join("\n")}`,
+      `generated repository still contains placeholders:\n${placeholders.join("\n")}\n` +
+        "Next: add a { file, placeholder } entry to PLACEHOLDER_TARGETS in scripts/bootstrap.mjs for each line, then rerun bootstrap.",
     );
   }
   assertGeneratedAiLayer(root, preview);

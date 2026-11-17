@@ -6,6 +6,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -138,6 +139,18 @@ async function assertGeneratedTreeIsFormatted(root: string): Promise<void> {
 
 function aiLayerFiles(root: string): string[] {
   return ["CLAUDE.md", ...relativeFiles(root, ".claude")];
+}
+
+// Every `.ts` module under `apps/` or `packages/` that names the template's
+// workspace scope, derived from the copy rather than listed by hand.
+function scopedWorkspaceModules(root: string): string[] {
+  return ["apps", "packages"]
+    .flatMap((directory) => relativeFiles(root, directory))
+    .filter(
+      (relative) =>
+        relative.endsWith(".ts") &&
+        readFileSync(path.join(root, relative), "utf8").includes("@my-game/"),
+    );
 }
 
 function options(
@@ -407,6 +420,8 @@ describe("bootstrap generation", () => {
     ["space-tiles", "Tom & Jerry's <Big> Day"],
   ])("generates %s titled %j", async (packageName, title) => {
     const root = copyTemplate();
+    const scopedModules = scopedWorkspaceModules(root);
+    expect(scopedModules).not.toEqual([]);
     const binaryBefore = readFileSync(
       path.join(root, "tests", "fixtures", "binary.dat"),
     );
@@ -534,13 +549,9 @@ describe("bootstrap generation", () => {
     expect(lockfile).not.toContain("@my-game/");
     // A module importing core by its scoped name must follow the rename, or its
     // import no longer resolves and the typed lint rules fail on it.
-    for (const relative of [
-      "apps/web/src/scenes/PlayScene.ts",
-      "apps/web/src/view/board-view.ts",
-      "apps/web/test/view/board-view.test.ts",
-    ]) {
+    for (const relative of scopedModules) {
       const source = readFileSync(path.join(root, relative), "utf8");
-      expect(source).toContain(`from "@${packageName}/core";`);
+      expect(source).toContain(`@${packageName}/`);
       expect(source).not.toContain("@my-game/");
     }
 
@@ -598,6 +609,153 @@ describe("bootstrap generation", () => {
 
     expect(readFileSync(untouched, "utf8")).toBe("my-game My Game");
     expect(findPlaceholders(root)).toEqual([]);
+  });
+
+  describe("an unlisted module that imports a workspace package (#38)", () => {
+    const scopedImport =
+      'import * as core from "@my-game/core";\n\nexport const probe = core;\n';
+
+    function plant(root: string, relative: string, text = scopedImport): string {
+      const absolute = path.join(root, relative);
+      mkdirSync(path.dirname(absolute), { recursive: true });
+      writeFileSync(absolute, text);
+      return absolute;
+    }
+
+    function expectRefusal(run: () => unknown, relative: string): void {
+      let caught: unknown;
+      try {
+        run();
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(BootstrapError);
+      expect(caught).toMatchObject({ code: "ERR_PLACEHOLDER_REMAINING" });
+      expect((caught as Error).message).toContain(`${relative}: my-game`);
+    }
+
+    it.each(["apps/web/src/extra/uses-core.ts", "packages/extra/src/index.ts"])(
+      "refuses %s before writing anything",
+      (relative) => {
+        const root = copyTemplate();
+        const planted = plant(root, relative);
+        const packageJsonBefore = readFileSync(path.join(root, "package.json"), "utf8");
+
+        expectRefusal(() => bootstrap(root, options("unlisted-module")), relative);
+
+        expect(existsSync(path.join(root, "scripts", "bootstrap.mjs"))).toBe(true);
+        expect(existsSync(path.join(root, ORIGIN_FILE))).toBe(false);
+        expect(readFileSync(path.join(root, "package.json"), "utf8")).toBe(
+          packageJsonBefore,
+        );
+        expect(readFileSync(planted, "utf8")).toBe(scopedImport);
+      },
+    );
+
+    it("refuses it in a dry run without changing anything", () => {
+      const root = copyTemplate();
+      const relative = "apps/web/src/extra/uses-core.ts";
+      const planted = plant(root, relative);
+      const packageJsonBefore = readFileSync(path.join(root, "package.json"), "utf8");
+
+      expectRefusal(
+        () => bootstrap(root, { ...options("unlisted-module"), dryRun: true }),
+        relative,
+      );
+
+      expect(readFileSync(path.join(root, "package.json"), "utf8")).toBe(
+        packageJsonBefore,
+      );
+      expect(readFileSync(planted, "utf8")).toBe(scopedImport);
+    });
+
+    it("makes main exit 2 naming the file", async () => {
+      const root = copyTemplate();
+      const relative = "apps/web/src/extra/uses-core.ts";
+      plant(root, relative);
+      vi.spyOn(process, "cwd").mockReturnValue(root);
+      const err: string[] = [];
+      vi.spyOn(consoleModule, "error").mockImplementation((line: unknown) => {
+        err.push(String(line));
+      });
+
+      await expect(
+        main([
+          "unlisted-module",
+          "--title",
+          "Acme Game",
+          "--author",
+          "Ada Lovelace",
+          "--github-user",
+          "ada",
+          "--license",
+          "MIT",
+        ]),
+      ).resolves.toBe(2);
+
+      const stderr = err.join("\n");
+      expect(stderr).toContain("ERR_PLACEHOLDER_REMAINING");
+      expect(stderr).toContain(`${relative}: my-game`);
+    });
+
+    it.each([
+      ["outside apps/ and packages/", "tools/uses-core.ts", scopedImport],
+      ["not a .ts file", "apps/web/notes.txt", "@my-game/core\n"],
+      ["under node_modules", "apps/web/node_modules/dep/index.ts", scopedImport],
+      [
+        "the bare name without the scope",
+        "apps/web/src/notes.ts",
+        'export const note = "my-game";\n',
+      ],
+    ])("does not report a file %s", (_label, relative, text) => {
+      const root = copyTemplate();
+      const planted = plant(root, relative, text);
+
+      bootstrap(root, options("unreported-module"));
+
+      expect(readFileSync(planted, "utf8")).toBe(text);
+      expect(findPlaceholders(root)).toEqual([]);
+    });
+
+    it("does not follow a symbolic link", () => {
+      const root = copyTemplate();
+      const planted = plant(root, "outside/uses-core.ts");
+      symlinkSync(
+        path.join(root, "outside"),
+        path.join(root, "apps", "web", "linked"),
+        "dir",
+      );
+
+      bootstrap(root, options("unreported-module"));
+
+      expect(readFileSync(planted, "utf8")).toBe(scopedImport);
+      expect(findPlaceholders(root)).toEqual([]);
+    });
+
+    it("reports a module written after bootstrap, read from disk", () => {
+      const root = copyTemplate();
+      bootstrap(root, options("late-module"));
+      plant(root, "apps/web/src/late.ts");
+
+      expect(findPlaceholders(root)).toEqual(["apps/web/src/late.ts: my-game"]);
+    });
+
+    it("reports a listed target once", () => {
+      const root = copyTemplate();
+      bootstrap(root, options("listed-module"));
+      plant(root, "apps/web/src/scenes/PlayScene.ts");
+
+      expect(findPlaceholders(root)).toEqual([
+        "apps/web/src/scenes/PlayScene.ts: my-game",
+      ]);
+    });
+
+    it("finds nothing when neither root exists", () => {
+      const root = mkdtempSync(path.join(tmpdir(), "typescript-template-test-"));
+      workspaces.push(root);
+
+      expect(findPlaceholders(root)).toEqual([]);
+    });
   });
 
   it("makes dry-run non-mutating", () => {
