@@ -64,7 +64,9 @@ that constant's comment asks for.
   the title refuses characters a TypeScript literal or HTML text would need rewritten.
 - Every file that carries the slug or title is a `PLACEHOLDER_TARGETS` entry, including
   `pnpm-lock.yaml` (its `apps/web` importer names the core package) and any module that
-  imports a workspace package by its `@my-game/` name. A missed one fails
+  imports a workspace package by its `@my-game/` name. An unlisted `.ts` module under
+  `apps/` or `packages/` that names `@my-game/` makes the bootstrap itself refuse with
+  `ERR_PLACEHOLDER_REMAINING`, naming the file; another missed one fails
   `ERR_WORKSPACE_NAME` or `ERR_GAME_RENAME_MISSING` in the verifier.
 
 ## Verifying a change
