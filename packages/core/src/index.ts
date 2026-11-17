@@ -1,4 +1,5 @@
 export {
+  ConfigMismatchError,
   InvalidMoveError,
   RulesVersionError,
   type InvalidMoveReason,

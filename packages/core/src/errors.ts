@@ -51,3 +51,20 @@ export class RulesVersionError extends Error {
     this.expected = expected;
   }
 }
+
+/**
+ * Thrown by `replay` for a record whose config is not the one its rules
+ * version is played under.
+ *
+ * @remarks
+ * Such a record is rejected, never replayed under the config it carries.
+ */
+export class ConfigMismatchError extends Error {
+  /** The stable identifier to branch on. */
+  readonly code = "ERR_CONFIG_MISMATCH" as const;
+
+  constructor() {
+    super("record.config must be the config of the record's rules version.");
+    this.name = "ConfigMismatchError";
+  }
+}

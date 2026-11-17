@@ -4,10 +4,10 @@ description: >
   Use when writing or reviewing anything under packages/core/src/** or
   packages/core/test/**: the xoshiro128** PRNG and splitmix32 seeding, seedFrom
   (FNV-1a), dailySeed, createGame, applyMove, isOver, score, replay, the replay record
-  and RULES_VERSION, ERR_INVALID_MOVE or ERR_RULES_VERSION, a changed value in
-  golden.test.ts, a property test, a lint error in core for Math.random, Date, Math.sin,
-  Math.pow, ** or localeCompare, a float or class in game state, or the sample ruleset
-  in packages/core/src/sample/.
+  and RULES_VERSION, ERR_INVALID_MOVE, ERR_RULES_VERSION or ERR_CONFIG_MISMATCH, a
+  changed value in golden.test.ts, a property test, a lint error in core for
+  Math.random, Date, Math.sin, Math.pow, ** or localeCompare, a float or class in game
+  state, or the sample ruleset in packages/core/src/sample/.
 ---
 
 # Writing Game Core
@@ -64,8 +64,10 @@ enters core as a plain value.
   after a round trip through JSON, and a class instance, a `Map`, a `Date`, or an
   `undefined` field does not survive that trip unchanged. Integer state also keeps every
   operation exact, so nothing tempts a rule toward the approximated `Math` functions.
-- `config` holds the ruleset's parameters as plain JSON and travels in the replay
-  record, so a run is reproduced with the parameters it was played under.
+- `config` holds the ruleset's parameters as plain JSON. The rules version fixes its
+  values: `SAMPLE_CONFIG` is the config of `RULES_VERSION`. A replay record carries a
+  copy, which states the parameters the run claims and never chooses the ones it is
+  replayed under.
 - `isOver` and `score` are functions of `State` alone.
 - A new error type or code, and type-level choices, follow the conventions in
   `.claude/rules/typescript.md`.
@@ -73,11 +75,19 @@ enters core as a plain value.
 ## Replay and rules version
 
 - The replay record is `{ v, seed, config, moves }`, where `v` is the `RULES_VERSION`
-  (`packages/core/src/rules-version.ts`) the run was played under.
-- `replay(record)` throws with code `ERR_RULES_VERSION` when `record.v` differs from
-  `RULES_VERSION`; otherwise it folds `applyMove` over `moves` from
-  `createGame(seed, config)` and returns `{ state, score }`. A record from another
-  version is rejected, never reinterpreted.
+  (`packages/core/src/rules-version.ts`) the run was played under and `config` is the
+  config of that version.
+- `replay(record)` checks in order: it throws with code `ERR_RULES_VERSION` when
+  `record.v` differs from `RULES_VERSION`, then with code `ERR_CONFIG_MISMATCH` when
+  `record.config` is not an object holding every field of `SAMPLE_CONFIG` with a
+  strictly equal value (other keys are ignored). Otherwise it folds `applyMove` over
+  `moves` from `createGame(seed, SAMPLE_CONFIG)`, never from `record.config`, and
+  returns `{ state, score }`. A record from another version or with another config is
+  rejected, never reinterpreted.
+- The rules version decides the config of a replayed run; the record and the caller do
+  not. The score depends on `moveLimit`, so a config the record could set would let a
+  submitted run set its own score, and a `replay(record, config)` signature would hand
+  that choice to every caller.
 - Once a release has shipped, any change that alters a golden value bumps
   `RULES_VERSION`, and the new golden literals land in the same change. That covers
   board generation, the order of PRNG draws, move semantics, scoring, and config

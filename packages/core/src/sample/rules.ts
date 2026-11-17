@@ -7,8 +7,9 @@ const KINDS = 4;
  * The sample ruleset's parameters, as plain JSON.
  *
  * @remarks
- * A replay record carries the config, so a run is reproduced with the
- * parameters it was played under. `size` and `kinds` are fixed: `State` does
+ * A replay record carries the config its run was played under, and `replay`
+ * accepts only the values of `SAMPLE_CONFIG`: the rules version decides a
+ * run's parameters, never the record. `size` and `kinds` are fixed: `State` does
  * not carry them, so `applyMove` could not honour another value.
  */
 export interface Config {
