@@ -55,7 +55,7 @@ Run the narrowest check that can fail, then the gate: `pnpm exec vitest run <pat
 `pnpm build && pnpm budget` then `pnpm package:crazygames` for `apps/web/src/platform/`
 or the build config; `pnpm install` then `pnpm check` after a manifest; `pnpm fix` after
 Markdown; `pnpm test:watch` reruns tests until stopped. The hooks and CI run these same
-checks; CI adds typos, dependency review and gitleaks.
+checks; CI adds typos (`pnpm check:typos` locally), dependency review and gitleaks.
 
 ## Architecture
 
