@@ -31,6 +31,7 @@ pnpm dev           # Vite's dev server for apps/web; runs until stopped
 pnpm e2e:browsers  # once per machine: install Playwright's Chromium
 pnpm test:e2e      # rebuild apps/web/dist, then the Chromium boot smoke (E2E_PORT, default 4173)
 pnpm check:staged  # the pre-commit secret check by hand; pnpm clean removes build output
+pnpm check:typos   # the Typos workflow's spell check; needs typos at the version CI pins
 pnpm repo:labels   # create/update GitHub labels from .github/labels.yml
 ```
 
@@ -55,7 +56,8 @@ Run the narrowest check that can fail, then the gate: `pnpm exec vitest run <pat
 `pnpm build && pnpm budget` then `pnpm package:crazygames` for `apps/web/src/platform/`
 or the build config; `pnpm install` then `pnpm check` after a manifest; `pnpm fix` after
 Markdown; `pnpm test:watch` reruns tests until stopped. The hooks and CI run these same
-checks; CI adds typos, dependency review and gitleaks.
+checks; CI adds typos (`pnpm check:typos` runs it locally where the pinned `typos` is
+installed), dependency review and gitleaks.
 
 ## Architecture
 

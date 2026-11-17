@@ -17,6 +17,7 @@ const automationTests = [
   "tests/bootstrap.test.ts",
   "tests/check-budget.test.ts",
   "tests/check-staged.test.ts",
+  "tests/check-typos.test.ts",
   "tests/ci-sync.test.ts",
   "tests/clean.test.ts",
   "tests/determinism-lint.test.ts",

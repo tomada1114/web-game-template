@@ -63,9 +63,11 @@ was committed.
   else that changed means the branch differs from what was judged: inspect it, commit
   the task's changes, and run the gate again.
 
-`pnpm check` does not spell-check; the `Typos` workflow does, on the pull request. Where
-`typos` is installed, `typos --config typos.toml` runs the same check locally. The Test
-Plan names each command that ran.
+`pnpm check` does not spell-check; the `Typos` workflow does, on the pull request.
+`pnpm check:typos` runs the same check locally at the version CI pins. When it stops
+with `ERR_TYPOS_MISSING` or `ERR_TYPOS_VERSION_MISMATCH`, this host cannot run it:
+report it as not run, naming the `Typos` job, and never replace it with a `typos` of
+another version. The Test Plan names each command that ran.
 
 ## 3. Read the diff for what the gate cannot judge
 
